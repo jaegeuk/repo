@@ -35,6 +35,7 @@
 #include "3rdparty/hmac_sha/hmac_sha2.h"
 
 /* disable APIs */
+#ifndef htobe16
 #define htobe16(x) (x)
 #define htole16(x) (x)
 #define be16toh(x) (x)
@@ -49,6 +50,7 @@
 #define htole64(x) (x)
 #define be64toh(x) (x)
 #define le64toh(x) (x)
+#endif
 
 int read_extcsd(int fd, __u8 *ext_csd)
 {
