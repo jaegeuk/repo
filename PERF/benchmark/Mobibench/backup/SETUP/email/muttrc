@@ -1,0 +1,126 @@
+
+set realname = "Jaegeuk Kim"
+set from = jaegeuk@kernel.org
+set use_from = yes
+set envelope_from ="yes"
+set sendmail="/opt/local/bin/msmtp"
+set signature="~/.signature"
+#set smtp_url = "smtp://smtp.samsung.com:25"
+#set smtp_pass = "fresh4340"
+
+# If not set in environment variables:
+set spoolfile = /var/spool/mail/jaegeuk
+
+#======================================================#
+# Folders
+set folder="~/Mail"                # Mailboxes in here
+set record="+sent/mbox"            # where to store sent messages
+set postponed="+postponed/mbox"    # where to store draft messages
+set move=no                        # Don't move mail from the spool.
+
+set header_cache=~/.mutt/cache/headers
+set message_cachedir=~/.mutt/cache/bodies
+set sort = 'threads'
+set sort_aux = 'reverse-last-date-received'
+set auto_tag = yes
+
+ignore "Authentication-Results:"
+ignore "DomainKey-Signature:"
+ignore "DKIM-Signature:"
+
+alternative_order text/plain text/enriched text/html *
+auto_view text/html
+set implicit_autoview
+set ascii_chars = yes
+set smart_wrap = yes
+
+#======================================================#
+# sidevar
+set sidebar_visible=yes
+set sidebar_width=20
+set sidebar_delim='|'
+
+color sidebar_new yellow default
+
+macro index .i  "<limit>(~N|~F)<Enter>"  "view new/flag"
+macro index .a  "<limit>~A<Enter>"       "view all"
+
+bind index CP sidebar-prev
+bind index CN sidebar-next
+bind index CO sidebar-open
+bind pager CP sidebar-prev
+bind pager CN sidebar-next
+bind pager CO sidebar-open
+
+#======================================================#
+# Watch these mailboxes for new mail:
+mailboxes ! +f2fs/mbox
+mailboxes ! +fsdev/mbox
+mailboxes ! +linux/mbox
+mailboxes ! +other/mbox
+set sort_browser=alpha    # Sort mailboxes by alpha(bet)
+
+#======================================================#
+# Order of headers and what to show
+hdr_order Date: From: User-Agent: X-Mailer \
+          To: Cc: Reply-To: Subject:
+ignore *
+#unignore Date: From: User-Agent: X-Mailer  \
+#         To: Cc: Reply-To: Subject:
+unignore Date: From: User-Agent: X-Mailer Subject:
+
+#======================================================#
+# which editor do you want to use?
+# vim of course!
+#set editor="vim -c 'set tw=70 et' '+/^$' "
+set editor="vim"
+set edit_headers          # See the headers when editing
+
+#======================================================#
+# Aliases
+
+set alias_file="~/.mutt-alias"
+source ~/.mutt-alias
+set sort_alias=alias     # sort aliases in alpha order by alias name
+
+#======================================================#
+# Odds and ends
+set markers          # mark wrapped lines of text in the pager with a +
+set smart_wrap       # Don't wrap mid-word
+set pager_context=5  # Retain 5 lines of previous page when scrolling.
+set status_on_top    # Status bar on top.
+push <show-version>  # Shows mutt version at startup
+
+# Colours
+color index red black ~N
+color index red black ~O
+
+#macro index,pager I '<shell-escape> fetchmail -v<enter>'
+
+color body green default "^diff \-.*"
+color body green default "^index [a-f0-9].*"
+color body green default "^\-\-\- .*"
+color body green default "^[\+]{3} .*"
+color body cyan default "^[\+][^\+]+.*"
+color body red  default "^\-[^\-]+.*"
+color body brightblue default "^@@ .*"
+
+
+color normal      white          black
+color hdrdefault  green          default
+color quoted      green          default
+color quoted1     yellow         default
+color quoted2     red            default
+color signature   cyan           default
+color indicator   brightyellow   red
+color error       brightred      default
+color status      brightwhite    blue
+color tree        brightmagenta  black
+color tilde       blue           default
+color attachment  brightyellow   default
+color markers     brightred      default
+color message     white          black
+color search      brightwhite    magenta
+color bold        brightyellow   default
+
+color index green black "~F"

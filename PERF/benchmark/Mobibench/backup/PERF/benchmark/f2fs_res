@@ -1,0 +1,429 @@
+Utilization: 0% (46448 valid blocks)
+/data                   54.7G     1.1G    53.5G   4096
+1 :| Write        1024 MBs |    9.3 s | 110.237 MB/s |   5.5 %  |  16.4 % |
+1 :| Random Write  195 MBs |   10.2 s |  19.101 MB/s |   1.0 %  |  18.7 % |
+Utilization: 2% (308851 valid blocks)
+/data                   54.7G     2.1G    52.5G   4096
+2 :| Write        1024 MBs |    9.6 s | 107.044 MB/s |   6.1 %  |  16.7 % |
+2 :| Random Write  195 MBs |   10.1 s |  19.259 MB/s |   0.9 %  |  17.8 % |
+Utilization: 4% (571254 valid blocks)
+/data                   54.7G     3.1G    51.5G   4096
+3 :| Write        1024 MBs |    9.2 s | 110.847 MB/s |   5.2 %  |  16.9 % |
+3 :| Random Write  195 MBs |   10.0 s |  19.522 MB/s |   1.3 %  |  17.7 % |
+Utilization: 5% (833657 valid blocks)
+/data                   54.7G     4.1G    50.5G   4096
+4 :| Write        1024 MBs |    9.6 s | 106.979 MB/s |   6.3 %  |  16.5 % |
+4 :| Random Write  195 MBs |   10.2 s |  19.154 MB/s |   1.0 %  |  17.4 % |
+Utilization: 7% (1096060 valid blocks)
+/data                   54.7G     5.1G    49.5G   4096
+5 :| Write        1024 MBs |    9.4 s | 109.311 MB/s |   7.0 %  |  14.8 % |
+5 :| Random Write  195 MBs |   10.0 s |  19.541 MB/s |   1.0 %  |  17.9 % |
+Utilization: 9% (1358463 valid blocks)
+/data                   54.7G     6.1G    48.5G   4096
+6 :| Write        1024 MBs |    8.6 s | 119.565 MB/s |   8.6 %  |  11.9 % |
+6 :| Random Write  195 MBs |   10.0 s |  19.512 MB/s |   1.0 %  |  18.0 % |
+Utilization: 11% (1620866 valid blocks)
+/data                   54.7G     7.1G    47.5G   4096
+7 :| Write        1024 MBs |    8.3 s | 123.092 MB/s |   8.9 %  |  11.7 % |
+7 :| Random Write  195 MBs |   10.1 s |  19.422 MB/s |   1.6 %  |  17.5 % |
+Utilization: 13% (1883269 valid blocks)
+/data                   54.7G     8.1G    46.5G   4096
+8 :| Write        1024 MBs |    9.2 s | 111.058 MB/s |   5.9 %  |  17.0 % |
+8 :| Random Write  195 MBs |   10.0 s |  19.467 MB/s |   1.3 %  |  17.6 % |
+Utilization: 15% (2145672 valid blocks)
+/data                   54.7G     9.1G    45.5G   4096
+9 :| Write        1024 MBs |    9.5 s | 107.317 MB/s |   6.1 %  |  16.7 % |
+9 :| Random Write  195 MBs |    9.7 s |  20.100 MB/s |   1.1 %  |  18.5 % |
+Utilization: 17% (2408075 valid blocks)
+/data                   54.7G    10.1G    44.5G   4096
+10 :| Write        1024 MBs |    8.9 s | 115.082 MB/s |   7.0 %  |  15.7 % |
+10 :| Random Write  195 MBs |   10.5 s |  18.548 MB/s |   1.2 %  |  18.6 % |
+Utilization: 19% (2670478 valid blocks)
+/data                   54.7G    11.1G    43.5G   4096
+11 :| Write        1024 MBs |    8.2 s | 124.260 MB/s |   9.1 %  |  11.8 % |
+11 :| Random Write  195 MBs |   10.1 s |  19.381 MB/s |   1.2 %  |  17.7 % |
+Utilization: 20% (2932881 valid blocks)
+/data                   54.7G    12.1G    42.5G   4096
+12 :| Write        1024 MBs |    9.7 s | 105.494 MB/s |   5.9 %  |  16.9 % |
+12 :| Random Write  195 MBs |   10.0 s |  19.506 MB/s |   1.1 %  |  18.0 % |
+Utilization: 22% (3195284 valid blocks)
+/data                   54.7G    13.1G    41.5G   4096
+13 :| Write        1024 MBs |    9.1 s | 112.973 MB/s |   6.5 %  |  16.4 % |
+13 :| Random Write  195 MBs |   10.1 s |  19.349 MB/s |   1.2 %  |  17.7 % |
+Utilization: 24% (3457687 valid blocks)
+/data                   54.7G    14.1G    40.5G   4096
+14 :| Write        1024 MBs |    9.4 s | 108.615 MB/s |   6.3 %  |  16.8 % |
+14 :| Random Write  195 MBs |   10.1 s |  19.416 MB/s |   0.5 %  |  18.5 % |
+Utilization: 26% (3720090 valid blocks)
+/data                   54.7G    15.1G    39.5G   4096
+15 :| Write        1024 MBs |    8.2 s | 124.755 MB/s |   8.4 %  |  12.6 % |
+15 :| Random Write  195 MBs |   10.1 s |  19.410 MB/s |   0.8 %  |  18.1 % |
+Utilization: 28% (3982493 valid blocks)
+/data                   54.7G    16.1G    38.5G   4096
+16 :| Write        1024 MBs |    8.9 s | 115.305 MB/s |   7.2 %  |  15.7 % |
+16 :| Random Write  195 MBs |   10.0 s |  19.535 MB/s |   0.7 %  |  18.5 % |
+Utilization: 30% (4244896 valid blocks)
+/data                   54.7G    17.1G    37.5G   4096
+17 :| Write        1024 MBs |    9.6 s | 106.375 MB/s |   6.1 %  |  17.0 % |
+17 :| Random Write  195 MBs |   10.1 s |  19.389 MB/s |   0.9 %  |  17.9 % |
+Utilization: 32% (4507299 valid blocks)
+/data                   54.7G    18.1G    36.5G   4096
+18 :| Write        1024 MBs |    9.8 s | 104.773 MB/s |   6.1 %  |  16.7 % |
+18 :| Random Write  195 MBs |   10.0 s |  19.474 MB/s |   0.9 %  |  18.0 % |
+Utilization: 34% (4769702 valid blocks)
+/data                   54.7G    19.1G    35.5G   4096
+19 :| Write        1024 MBs |    9.4 s | 108.403 MB/s |   6.1 %  |  16.6 % |
+19 :| Random Write  195 MBs |   10.0 s |  19.531 MB/s |   0.8 %  |  18.4 % |
+Utilization: 35% (5032105 valid blocks)
+/data                   54.7G    20.1G    34.5G   4096
+20 :| Write        1024 MBs |    9.1 s | 112.380 MB/s |   6.7 %  |  16.5 % |
+20 :| Random Write  195 MBs |   10.0 s |  19.451 MB/s |   0.6 %  |  18.5 % |
+Utilization: 37% (5294508 valid blocks)
+/data                   54.7G    21.1G    33.5G   4096
+21 :| Write        1024 MBs |    8.5 s | 120.970 MB/s |   9.0 %  |  12.2 % |
+21 :| Random Write  195 MBs |   10.1 s |  19.433 MB/s |   0.8 %  |  18.3 % |
+Utilization: 39% (5556911 valid blocks)
+/data                   54.7G    22.1G    32.5G   4096
+22 :| Write        1024 MBs |    8.5 s | 120.292 MB/s |   7.4 %  |  14.9 % |
+22 :| Random Write  195 MBs |   10.1 s |  19.417 MB/s |   1.0 %  |  17.9 % |
+Utilization: 41% (5819314 valid blocks)
+/data                   54.7G    23.1G    31.5G   4096
+23 :| Write        1024 MBs |    9.8 s | 104.409 MB/s |   5.5 %  |  17.1 % |
+23 :| Random Write  195 MBs |   10.0 s |  19.443 MB/s |   1.2 %  |  18.1 % |
+Utilization: 43% (6081717 valid blocks)
+/data                   54.7G    24.1G    30.5G   4096
+24 :| Write        1024 MBs |    9.1 s | 113.056 MB/s |   7.9 %  |  13.7 % |
+24 :| Random Write  195 MBs |   10.1 s |  19.418 MB/s |   1.5 %  |  17.7 % |
+Utilization: 45% (6344120 valid blocks)
+/data                   54.7G    25.1G    29.5G   4096
+25 :| Write        1024 MBs |    8.5 s | 120.830 MB/s |   9.2 %  |  11.5 % |
+25 :| Random Write  195 MBs |   10.0 s |  19.443 MB/s |   1.0 %  |  17.9 % |
+Utilization: 47% (6606523 valid blocks)
+/data                   54.7G    26.1G    28.5G   4096
+26 :| Write        1024 MBs |    8.3 s | 122.712 MB/s |   8.7 %  |  12.2 % |
+26 :| Random Write  195 MBs |   10.0 s |  19.530 MB/s |   1.1 %  |  18.1 % |
+Utilization: 49% (6868926 valid blocks)
+/data                   54.7G    27.1G    27.5G   4096
+27 :| Write        1024 MBs |    8.6 s | 119.078 MB/s |   7.9 %  |  13.6 % |
+27 :| Random Write  195 MBs |   10.1 s |  19.341 MB/s |   1.0 %  |  17.9 % |
+Utilization: 50% (7131329 valid blocks)
+/data                   54.7G    28.1G    26.5G   4096
+28 :| Write        1024 MBs |    8.5 s | 120.620 MB/s |   7.1 %  |  15.9 % |
+28 :| Random Write  195 MBs |   10.1 s |  19.338 MB/s |   1.5 %  |  17.4 % |
+Utilization: 52% (7393732 valid blocks)
+/data                   54.7G    29.1G    25.5G   4096
+29 :| Write        1024 MBs |    9.7 s | 105.140 MB/s |   6.2 %  |  16.5 % |
+29 :| Random Write  195 MBs |   10.1 s |  19.373 MB/s |   0.8 %  |  18.1 % |
+Utilization: 54% (7656135 valid blocks)
+/data                   54.7G    30.1G    24.5G   4096
+30 :| Write        1024 MBs |    9.8 s | 104.782 MB/s |   5.9 %  |  17.0 % |
+30 :| Random Write  195 MBs |   10.0 s |  19.572 MB/s |   1.1 %  |  18.0 % |
+Utilization: 56% (7918538 valid blocks)
+/data                   54.7G    31.1G    23.5G   4096
+31 :| Write        1024 MBs |    8.3 s | 124.045 MB/s |   8.8 %  |  12.1 % |
+31 :| Random Write  195 MBs |   10.1 s |  19.315 MB/s |   1.0 %  |  17.8 % |
+Utilization: 58% (8180941 valid blocks)
+/data                   54.7G    32.1G    22.5G   4096
+32 :| Write        1024 MBs |    9.6 s | 106.320 MB/s |   6.3 %  |  16.4 % |
+32 :| Random Write  195 MBs |   10.1 s |  19.313 MB/s |   0.9 %  |  17.8 % |
+Utilization: 60% (8443344 valid blocks)
+/data                   54.7G    33.1G    21.5G   4096
+33 :| Write        1024 MBs |    9.9 s | 102.982 MB/s |   6.0 %  |  16.4 % |
+33 :| Random Write  195 MBs |   10.1 s |  19.399 MB/s |   0.5 %  |  18.4 % |
+Utilization: 62% (8705747 valid blocks)
+/data                   54.7G    34.1G    20.5G   4096
+34 :| Write        1024 MBs |    9.2 s | 110.966 MB/s |   6.6 %  |  15.9 % |
+34 :| Random Write  195 MBs |   10.1 s |  19.330 MB/s |   0.5 %  |  18.5 % |
+Utilization: 64% (8968150 valid blocks)
+/data                   54.7G    35.1G    19.5G   4096
+35 :| Write        1024 MBs |    8.2 s | 124.850 MB/s |   9.2 %  |  12.0 % |
+35 :| Random Write  195 MBs |   10.4 s |  18.705 MB/s |   1.1 %  |  17.8 % |
+Utilization: 65% (9230553 valid blocks)
+/data                   54.7G    36.1G    18.5G   4096
+36 :| Write        1024 MBs |    8.2 s | 124.363 MB/s |   9.5 %  |  11.3 % |
+36 :| Random Write  195 MBs |   10.1 s |  19.280 MB/s |   1.3 %  |  17.6 % |
+Utilization: 67% (9492956 valid blocks)
+/data                   54.7G    37.1G    17.5G   4096
+37 :| Write        1024 MBs |    8.6 s | 119.638 MB/s |   7.4 %  |  15.1 % |
+37 :| Random Write  195 MBs |   10.1 s |  19.391 MB/s |   1.1 %  |  18.0 % |
+Utilization: 69% (9755359 valid blocks)
+/data                   54.7G    38.1G    16.5G   4096
+38 :| Write        1024 MBs |   13.1 s |  78.351 MB/s |   5.6 %  |   9.9 % |
+38 :| Random Write  195 MBs |   10.9 s |  17.964 MB/s |   0.6 %  |  17.0 % |
+Utilization: 71% (10017762 valid blocks)
+/data                   54.7G    39.1G    15.5G   4096
+39 :| Write        1024 MBs |   11.5 s |  89.345 MB/s |   6.1 %  |  10.0 % |
+39 :| Random Write  195 MBs |   11.4 s |  17.167 MB/s |   0.8 %  |  15.9 % |
+Utilization: 73% (10280165 valid blocks)
+/data                   54.7G    40.1G    14.5G   4096
+40 :| Write        1024 MBs |   15.9 s |  64.271 MB/s |   4.4 %  |  10.1 % |
+40 :| Random Write  195 MBs |   14.9 s |  13.070 MB/s |   0.7 %  |  12.3 % |
+Utilization: 75% (10542568 valid blocks)
+/data                   54.7G    41.1G    13.5G   4096
+41 :| Write        1024 MBs |   23.2 s |  44.176 MB/s |   3.4 %  |   6.9 % |
+41 :| Random Write  195 MBs |   16.0 s |  12.223 MB/s |   0.7 %  |  11.4 % |
+Utilization: 77% (10804971 valid blocks)
+/data                   54.7G    42.1G    12.5G   4096
+42 :| Write        1024 MBs |   26.4 s |  38.809 MB/s |   2.9 %  |   6.3 % |
+42 :| Random Write  195 MBs |   20.9 s |   9.335 MB/s |   0.6 %  |   8.8 % |
+Utilization: 79% (11067374 valid blocks)
+/data                   54.7G    43.2G    11.5G   4096
+43 :| Write        1024 MBs |   42.1 s |  24.304 MB/s |   2.2 %  |   2.7 % |
+43 :| Random Write  195 MBs |   25.8 s |   7.568 MB/s |   0.6 %  |   7.7 % |
+Utilization: 80% (11329777 valid blocks)
+/data                   54.7G    44.2G    10.5G   4096
+44 :| Write        1024 MBs |   45.2 s |  22.646 MB/s |   1.8 %  |   3.5 % |
+44 :| Random Write  195 MBs |   25.9 s |   7.538 MB/s |   0.5 %  |   7.2 % |
+Utilization: 82% (11592180 valid blocks)
+/data                   54.7G    45.2G     9.5G   4096
+45 :| Write        1024 MBs |   46.7 s |  21.937 MB/s |   1.4 %  |   4.4 % |
+45 :| Random Write  195 MBs |   31.4 s |   6.229 MB/s |   0.4 %  |   8.1 % |
+Utilization: 84% (11854583 valid blocks)
+/data                   54.7G    46.2G     8.5G   4096
+46 :| Write        1024 MBs |   93.4 s |  10.965 MB/s |   0.4 %  |   4.0 % |
+46 :| Random Write  195 MBs |  129.5 s |   1.508 MB/s |   0.2 %  |   8.6 % |
+Utilization: 86% (12116986 valid blocks)
+/data                   54.7G    47.2G     7.5G   4096
+47 :| Write        1024 MBs |   99.4 s |  10.306 MB/s |   0.4 %  |   4.0 % |
+47 :| Random Write  195 MBs |  121.5 s |   1.607 MB/s |   0.1 %  |   8.4 % |
+Utilization: 88% (12379389 valid blocks)
+/data                   54.7G    48.2G     6.5G   4096
+48 :| Write        1024 MBs |  119.6 s |   8.563 MB/s |   0.4 %  |   3.2 % |
+48 :| Random Write  195 MBs |  142.7 s |   1.369 MB/s |   0.1 %  |   7.3 % |
+Utilization: 90% (12641792 valid blocks)
+/data                   54.7G    49.2G     5.5G   4096
+49 :| Write        1024 MBs |  167.0 s |   6.131 MB/s |   0.3 %  |   2.3 % |
+49 :| Random Write  195 MBs |  300.2 s |   0.651 MB/s |   0.1 %  |   7.3 % |
+Utilization: 92% (12904195 valid blocks)
+/data                   54.7G    50.2G     4.5G   4096
+50 :| Write        1024 MBs |  158.9 s |   6.444 MB/s |   0.3 %  |   2.5 % |
+50 :| Random Write  195 MBs |  301.2 s |   0.648 MB/s |   0.0 %  |   7.7 % |
+Utilization: 94% (13166598 valid blocks)
+/data                   54.7G    51.2G     3.5G   4096
+51 :| Write        1024 MBs |  171.7 s |   5.966 MB/s |   0.3 %  |   2.4 % |
+51 :| Random Write  195 MBs |  305.2 s |   0.640 MB/s |   0.0 %  |   7.9 % |
+Utilization: 95% (13429001 valid blocks)
+/data                   54.7G    52.2G     2.5G   4096
+52 :| Write        1024 MBs |  182.2 s |   5.622 MB/s |   0.2 %  |   2.2 % |
+52 :| Random Write  195 MBs |  318.4 s |   0.613 MB/s |   0.1 %  |   6.3 % |
+Utilization: 97% (13691404 valid blocks)
+/data                   54.7G    53.2G     1.5G   4096
+53 :| Write        1024 MBs |  188.4 s |   5.435 MB/s |   0.2 %  |   2.3 % |
+53 :| Random Write  195 MBs |  310.2 s |   0.630 MB/s |   0.1 %  |   7.3 % |
+Utilization: 99% (13953807 valid blocks)
+/data                   54.7G    54.2G   506.9M   4096
+54 :Utilization: 0% (46448 valid blocks)
+/data                   54.7G     1.1G    53.5G   4096
+1 :| Write        1024 MBs |    8.3 s | 123.552 MB/s |   1.6 %  |  17.0 % |
+1 :| Random Write  195 MBs |    9.4 s |  20.806 MB/s |   1.1 %  |  20.5 % |
+Utilization: 2% (308851 valid blocks)
+/data                   54.7G     2.1G    52.5G   4096
+2 :| Write        1024 MBs |    8.2 s | 125.377 MB/s |   1.3 %  |  17.3 % |
+2 :| Random Write  195 MBs |    9.4 s |  20.841 MB/s |   1.3 %  |  20.5 % |
+Utilization: 4% (571254 valid blocks)
+/data                   54.7G     3.1G    51.5G   4096
+3 :| Write        1024 MBs |    8.2 s | 125.640 MB/s |   2.0 %  |  17.1 % |
+3 :| Random Write  195 MBs |    9.5 s |  20.608 MB/s |   1.2 %  |  20.4 % |
+Utilization: 5% (833657 valid blocks)
+/data                   54.7G     4.1G    50.5G   4096
+4 :| Write        1024 MBs |    8.1 s | 126.986 MB/s |   7.5 %  |  13.2 % |
+4 :| Random Write  195 MBs |    9.3 s |  20.970 MB/s |   1.6 %  |  20.3 % |
+Utilization: 7% (1096060 valid blocks)
+/data                   54.7G     5.1G    49.5G   4096
+5 :| Write        1024 MBs |    8.7 s | 117.152 MB/s |   7.3 %  |  14.0 % |
+5 :| Random Write  195 MBs |    9.3 s |  21.050 MB/s |   1.2 %  |  20.7 % |
+Utilization: 9% (1358463 valid blocks)
+/data                   54.7G     6.1G    48.5G   4096
+6 :| Write        1024 MBs |    8.5 s | 119.970 MB/s |   7.6 %  |  13.6 % |
+6 :| Random Write  195 MBs |    9.4 s |  20.878 MB/s |   1.7 %  |  20.8 % |
+Utilization: 11% (1620866 valid blocks)
+/data                   54.7G     7.1G    47.5G   4096
+7 :| Write        1024 MBs |    8.3 s | 124.008 MB/s |   9.2 %  |  11.1 % |
+7 :| Random Write  195 MBs |    9.9 s |  19.796 MB/s |   1.3 %  |  21.7 % |
+Utilization: 13% (1883269 valid blocks)
+/data                   54.7G     8.1G    46.5G   4096
+8 :| Write        1024 MBs |    9.0 s | 114.379 MB/s |   7.3 %  |  14.5 % |
+8 :| Random Write  195 MBs |    9.2 s |  21.245 MB/s |   1.5 %  |  20.9 % |
+Utilization: 15% (2145672 valid blocks)
+/data                   54.7G     9.1G    45.5G   4096
+9 :| Write        1024 MBs |    9.4 s | 108.425 MB/s |   6.5 %  |  15.9 % |
+9 :| Random Write  195 MBs |    9.2 s |  21.189 MB/s |   1.7 %  |  20.6 % |
+Utilization: 17% (2408075 valid blocks)
+/data                   54.7G    10.1G    44.5G   4096
+10 :| Write        1024 MBs |    9.2 s | 111.355 MB/s |   6.9 %  |  14.5 % |
+10 :| Random Write  195 MBs |    9.4 s |  20.804 MB/s |   1.6 %  |  20.7 % |
+Utilization: 19% (2670478 valid blocks)
+/data                   54.7G    11.1G    43.5G   4096
+11 :| Write        1024 MBs |    8.1 s | 126.482 MB/s |   9.1 %  |  11.7 % |
+11 :| Random Write  195 MBs |    9.2 s |  21.293 MB/s |   2.0 %  |  20.4 % |
+Utilization: 20% (2932881 valid blocks)
+/data                   54.7G    12.1G    42.5G   4096
+12 :| Write        1024 MBs |    8.2 s | 125.053 MB/s |   9.0 %  |  11.9 % |
+12 :| Random Write  195 MBs |    9.4 s |  20.767 MB/s |   1.3 %  |  20.2 % |
+Utilization: 22% (3195284 valid blocks)
+/data                   54.7G    13.1G    41.5G   4096
+13 :| Write        1024 MBs |    9.2 s | 111.177 MB/s |   7.6 %  |  14.2 % |
+13 :| Random Write  195 MBs |    9.3 s |  21.029 MB/s |   1.7 %  |  20.1 % |
+Utilization: 24% (3457687 valid blocks)
+/data                   54.7G    14.1G    40.5G   4096
+14 :| Write        1024 MBs |    8.5 s | 119.779 MB/s |   8.0 %  |  13.0 % |
+14 :| Random Write  195 MBs |    9.3 s |  20.950 MB/s |   1.6 %  |  20.2 % |
+Utilization: 26% (3720090 valid blocks)
+/data                   54.7G    15.1G    39.5G   4096
+15 :| Write        1024 MBs |    9.1 s | 112.362 MB/s |   6.6 %  |  16.4 % |
+15 :| Random Write  195 MBs |    9.3 s |  21.086 MB/s |   1.1 %  |  20.7 % |
+Utilization: 28% (3982493 valid blocks)
+/data                   54.7G    16.1G    38.5G   4096
+16 :| Write        1024 MBs |    8.6 s | 118.935 MB/s |   8.0 %  |  13.6 % |
+16 :| Random Write  195 MBs |    9.7 s |  20.212 MB/s |   1.3 %  |  20.3 % |
+Utilization: 30% (4244896 valid blocks)
+/data                   54.7G    17.1G    37.5G   4096
+17 :| Write        1024 MBs |    8.3 s | 122.841 MB/s |   8.8 %  |  12.4 % |
+17 :| Random Write  195 MBs |    9.2 s |  21.126 MB/s |   1.6 %  |  20.6 % |
+Utilization: 32% (4507299 valid blocks)
+/data                   54.7G    18.1G    36.5G   4096
+18 :| Write        1024 MBs |    9.2 s | 111.783 MB/s |   7.0 %  |  14.9 % |
+18 :| Random Write  195 MBs |    9.3 s |  20.988 MB/s |   1.0 %  |  21.0 % |
+Utilization: 34% (4769702 valid blocks)
+/data                   54.7G    19.1G    35.5G   4096
+19 :| Write        1024 MBs |    8.4 s | 122.304 MB/s |   9.4 %  |  11.3 % |
+19 :| Random Write  195 MBs |    9.6 s |  20.306 MB/s |   1.2 %  |  20.6 % |
+Utilization: 35% (5032105 valid blocks)
+/data                   54.7G    20.1G    34.5G   4096
+20 :| Write        1024 MBs |    9.3 s | 109.806 MB/s |   7.1 %  |  14.9 % |
+20 :| Random Write  195 MBs |    9.3 s |  21.046 MB/s |   1.4 %  |  20.9 % |
+Utilization: 37% (5294508 valid blocks)
+/data                   54.7G    21.1G    33.5G   4096
+21 :| Write        1024 MBs |    9.4 s | 109.510 MB/s |   7.1 %  |  14.9 % |
+21 :| Random Write  195 MBs |    9.4 s |  20.866 MB/s |   1.6 %  |  20.2 % |
+Utilization: 39% (5556911 valid blocks)
+/data                   54.7G    22.1G    32.5G   4096
+22 :| Write        1024 MBs |    8.4 s | 122.403 MB/s |   9.4 %  |  10.9 % |
+22 :| Random Write  195 MBs |    9.2 s |  21.264 MB/s |   1.2 %  |  21.2 % |
+Utilization: 41% (5819314 valid blocks)
+/data                   54.7G    23.1G    31.5G   4096
+23 :| Write        1024 MBs |    9.0 s | 114.403 MB/s |   7.3 %  |  15.3 % |
+23 :| Random Write  195 MBs |    9.5 s |  20.640 MB/s |   1.0 %  |  21.1 % |
+Utilization: 43% (6081717 valid blocks)
+/data                   54.7G    24.1G    30.5G   4096
+24 :| Write        1024 MBs |    9.5 s | 107.462 MB/s |   6.9 %  |  15.0 % |
+24 :| Random Write  195 MBs |    9.2 s |  21.128 MB/s |   1.9 %  |  20.0 % |
+Utilization: 45% (6344120 valid blocks)
+/data                   54.7G    25.1G    29.5G   4096
+25 :| Write        1024 MBs |    9.5 s | 107.225 MB/s |   6.5 %  |  15.8 % |
+25 :| Random Write  195 MBs |    9.6 s |  20.275 MB/s |   1.3 %  |  20.5 % |
+Utilization: 47% (6606523 valid blocks)
+/data                   54.7G    26.1G    28.5G   4096
+26 :| Write        1024 MBs |    9.0 s | 114.256 MB/s |   7.1 %  |  15.4 % |
+26 :| Random Write  195 MBs |    9.4 s |  20.754 MB/s |   1.7 %  |  20.0 % |
+Utilization: 49% (6868926 valid blocks)
+/data                   54.7G    27.1G    27.5G   4096
+27 :| Write        1024 MBs |    9.0 s | 114.027 MB/s |   6.9 %  |  15.3 % |
+27 :| Random Write  195 MBs |    9.4 s |  20.684 MB/s |   1.7 %  |  19.6 % |
+Utilization: 50% (7131329 valid blocks)
+/data                   54.7G    28.1G    26.5G   4096
+28 :| Write        1024 MBs |    8.2 s | 125.131 MB/s |   9.0 %  |  12.1 % |
+28 :| Random Write  195 MBs |    9.2 s |  21.235 MB/s |   1.7 %  |  20.8 % |
+Utilization: 52% (7393732 valid blocks)
+/data                   54.7G    29.1G    25.5G   4096
+29 :| Write        1024 MBs |    8.3 s | 123.192 MB/s |   9.6 %  |  10.9 % |
+29 :| Random Write  195 MBs |    9.2 s |  21.132 MB/s |   1.5 %  |  20.9 % |
+Utilization: 54% (7656135 valid blocks)
+/data                   54.7G    30.1G    24.5G   4096
+30 :| Write        1024 MBs |    9.2 s | 111.591 MB/s |   6.9 %  |  16.6 % |
+30 :| Random Write  195 MBs |    9.2 s |  21.219 MB/s |   1.3 %  |  21.0 % |
+Utilization: 56% (7918538 valid blocks)
+/data                   54.7G    31.1G    23.5G   4096
+31 :| Write        1024 MBs |    8.3 s | 123.499 MB/s |   8.7 %  |  12.5 % |
+31 :| Random Write  195 MBs |    9.3 s |  21.103 MB/s |   1.3 %  |  20.5 % |
+Utilization: 58% (8180941 valid blocks)
+/data                   54.7G    32.1G    22.5G   4096
+32 :| Write        1024 MBs |    8.4 s | 122.378 MB/s |   9.2 %  |  11.5 % |
+32 :| Random Write  195 MBs |    9.2 s |  21.301 MB/s |   1.3 %  |  21.3 % |
+Utilization: 60% (8443344 valid blocks)
+/data                   54.7G    33.1G    21.5G   4096
+33 :| Write        1024 MBs |    8.2 s | 124.676 MB/s |  10.0 %  |  10.7 % |
+33 :| Random Write  195 MBs |    9.3 s |  21.021 MB/s |   1.8 %  |  20.2 % |
+Utilization: 62% (8705747 valid blocks)
+/data                   54.7G    34.1G    20.5G   4096
+34 :| Write        1024 MBs |    8.5 s | 121.008 MB/s |   8.4 %  |  13.0 % |
+34 :| Random Write  195 MBs |   11.2 s |  17.379 MB/s |   1.5 %  |  16.9 % |
+Utilization: 64% (8968150 valid blocks)
+/data                   54.7G    35.1G    19.5G   4096
+35 :| Write        1024 MBs |   12.2 s |  84.146 MB/s |   6.8 %  |   8.4 % |
+35 :| Random Write  195 MBs |   10.3 s |  18.962 MB/s |   1.0 %  |  18.7 % |
+Utilization: 65% (9230553 valid blocks)
+/data                   54.7G    36.1G    18.5G   4096
+36 :| Write        1024 MBs |   12.3 s |  83.402 MB/s |   4.7 %  |  12.6 % |
+36 :| Random Write  195 MBs |   10.1 s |  19.358 MB/s |   1.4 %  |  19.0 % |
+Utilization: 67% (9492956 valid blocks)
+/data                   54.7G    37.1G    17.5G   4096
+37 :| Write        1024 MBs |   11.5 s |  88.986 MB/s |   6.5 %  |  10.0 % |
+37 :| Random Write  195 MBs |    9.9 s |  19.751 MB/s |   1.5 %  |  21.4 % |
+Utilization: 69% (9755359 valid blocks)
+/data                   54.7G    38.1G    16.5G   4096
+38 :| Write        1024 MBs |   14.2 s |  71.962 MB/s |   4.8 %  |  11.2 % |
+38 :| Random Write  195 MBs |   10.6 s |  18.359 MB/s |   1.3 %  |  20.1 % |
+Utilization: 71% (10017762 valid blocks)
+/data                   54.7G    39.1G    15.5G   4096
+39 :| Write        1024 MBs |   12.3 s |  83.143 MB/s |   5.1 %  |  11.9 % |
+39 :| Random Write  195 MBs |    9.9 s |  19.691 MB/s |   1.2 %  |  19.4 % |
+Utilization: 73% (10280165 valid blocks)
+/data                   54.7G    40.1G    14.5G   4096
+40 :| Write        1024 MBs |   12.0 s |  85.490 MB/s |   6.7 %  |   8.8 % |
+40 :| Random Write  195 MBs |   11.5 s |  16.974 MB/s |   0.9 %  |  19.1 % |
+Utilization: 75% (10542568 valid blocks)
+/data                   54.7G    41.1G    13.5G   4096
+41 :| Write        1024 MBs |   12.0 s |  85.106 MB/s |   7.3 %  |   8.0 % |
+41 :| Random Write  195 MBs |   11.0 s |  17.768 MB/s |   1.2 %  |  19.7 % |
+Utilization: 77% (10804971 valid blocks)
+/data                   54.7G    42.1G    12.5G   4096
+42 :| Write        1024 MBs |   14.0 s |  73.319 MB/s |   4.6 %  |  11.6 % |
+42 :| Random Write  195 MBs |   11.2 s |  17.395 MB/s |   1.5 %  |  17.4 % |
+Utilization: 79% (11067374 valid blocks)
+/data                   54.7G    43.2G    11.5G   4096
+43 :| Write        1024 MBs |   14.6 s |  70.259 MB/s |   4.7 %  |  10.7 % |
+43 :| Random Write  195 MBs |   10.8 s |  18.107 MB/s |   1.4 %  |  19.3 % |
+Utilization: 80% (11329777 valid blocks)
+/data                   54.7G    44.2G    10.5G   4096
+44 :| Write        1024 MBs |   14.2 s |  71.867 MB/s |   5.9 %  |   7.0 % |
+44 :| Random Write  195 MBs |   12.1 s |  16.167 MB/s |   1.3 %  |  17.7 % |
+Utilization: 82% (11592180 valid blocks)
+/data                   54.7G    45.2G     9.5G   4096
+45 :| Write        1024 MBs |   17.1 s |  60.010 MB/s |   4.5 %  |   8.0 % |
+45 :| Random Write  195 MBs |   11.5 s |  17.008 MB/s |   1.2 %  |  16.6 % |
+Utilization: 84% (11854583 valid blocks)
+/data                   54.7G    46.2G     8.5G   4096
+46 :| Write        1024 MBs |   25.1 s |  40.728 MB/s |   3.1 %  |   6.4 % |
+46 :| Random Write  195 MBs |   15.5 s |  12.622 MB/s |   0.8 %  |  14.1 % |
+Utilization: 86% (12116986 valid blocks)
+/data                   54.7G    47.2G     7.5G   4096
+47 :| Write        1024 MBs |   35.3 s |  29.014 MB/s |   2.3 %  |   4.3 % |
+47 :| Random Write  195 MBs |   17.2 s |  11.341 MB/s |   1.0 %  |  11.2 % |
+Utilization: 88% (12379389 valid blocks)
+/data                   54.7G    48.2G     6.5G   4096
+48 :| Write        1024 MBs |   34.7 s |  29.494 MB/s |   2.5 %  |   3.9 % |
+48 :| Random Write  195 MBs |   16.8 s |  11.629 MB/s |   1.0 %  |  12.7 % |
+Utilization: 90% (12641792 valid blocks)
+/data                   54.7G    49.2G     5.5G   4096
+49 :| Write        1024 MBs |   36.6 s |  27.979 MB/s |   2.5 %  |   3.7 % |
+49 :| Random Write  195 MBs |   18.2 s |  10.737 MB/s |   0.9 %  |  11.7 % |
+Utilization: 92% (12904195 valid blocks)
+/data                   54.7G    50.2G     4.5G   4096
+50 :| Write        1024 MBs |   39.5 s |  25.956 MB/s |   2.3 %  |   3.2 % |
+50 :| Random Write  195 MBs |   30.8 s |   6.345 MB/s |   0.4 %  |   6.9 % |
+Utilization: 94% (13166598 valid blocks)
+/data                   54.7G    51.2G     3.5G   4096
+51 :| Write        1024 MBs |  165.6 s |   6.185 MB/s |   0.6 %  |   0.9 % |
+51 :| Random Write  195 MBs |   53.4 s |   3.656 MB/s |   0.3 %  |   4.0 % |
+Utilization: 95% (13429001 valid blocks)
+/data                   54.7G    52.2G     2.5G   4096
+52 :| Write        1024 MBs |  168.2 s |   6.090 MB/s |   0.6 %  |   0.7 % |
+52 :| Random Write  195 MBs |   55.9 s |   3.495 MB/s |   0.1 %  |   3.9 % |
+Utilization: 97% (13691404 valid blocks)
+/data                   54.7G    53.2G     1.5G   4096
+53 :| Write        1024 MBs |  169.8 s |   6.030 MB/s |   0.5 %  |   0.8 % |
+53 :| Random Write  195 MBs |   53.3 s |   3.662 MB/s |   0.3 %  |   4.0 % |
+Utilization: 99% (13953807 valid blocks)
+/data                   54.7G    54.2G   506.9M   4096
+54 :

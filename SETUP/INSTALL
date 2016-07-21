@@ -1,0 +1,64 @@
+0. lvm
+install sda + lvm
+parted /dev/sdb -> mklabel GPT -> mkpart -> ext4 -> 1 -> -1 -> quit
+mkfs.ext4 /dev/sdb1
+pvcreate /dev/sdb1
+vgs
+vgextend xfstest-vg /dev/sdb1
+lvextend -l +100%FREE /dev/xfstest-vg/root
+resizefs /dev/xfstest-vg/root
+
+1. xrdp + mate
+sudo apt-get install xrdp
+sudo apt-add-repository ppa:ubuntu-mate-dev/ppa
+sudo apt-add-repository ppa:ubuntu-mate-dev/trusty-mate
+sudo apt-get update 
+sudo apt-get install ubuntu-mate-core ubuntu-mate-desktop
+
+echo mate-session > ~/.xsession
+sudo service xrdp restart
+
+/etc/xrdp/xrdp.ini
+ -> ask5910
+
+2. ssh
+ssh-keygen -t rsa
+cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+
+3. bash
+scp ./servers/.bashrc ~/
+
+4. virtualbox
+
+/etc/apt/sources.list
+  deb http://download.virtualbox.org/virtualbox/debian trusty contrib
+
+wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+apt-get update
+apt-get install virtualbox-5.0
+
+wget http://download.virtualbox.org/virtualbox/5.0.14/Oracle_VM_VirtualBox_Extension_Pack-5.0.14-105127.vbox-extpack
+
+VBoxManage extpack install Oracle_VM_VirtualBox_Extension_Pack-5.0.14-105127.vbox-extpack
+
+/etc/default/virtualbox -> VBOXWEB_USER=jaegeuk
+
+update-rc.d vboxweb-service defaults
+/etc/init.d/vboxweb-service start
+
+apt-get install php-soap
+
+scp ./servers/phpvirtualbox-5.0-5.zip xfstests:~/
+
+unzip phpvirtualbox-5.0-5.zip /var/www/
+
+/var/www/config.php-sample -> /var/www/config.php -> username & password --> jaegeuk & Auth=disable
+
+VBoxManage internalcommands sethduuid /home/jaegeuk/VirtualBox\ VMs/FILE_8GB/Linux.vdi
+
+--> discard :::  vbox and vbox-prev
+<AttachedDevice nonrotational="true" discard="true" type="HardDisk" hotpluggable="false" port="1" device="0">
+
+http://xfstests/
+

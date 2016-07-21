@@ -1,0 +1,18 @@
+# view AndroidManifest.xml #generated:26
+-keep class esos.MobiBench.First { <init>(...); }
+
+# view AndroidManifest.xml #generated:25
+-keep class esos.MobiBench.Info { <init>(...); }
+
+# view AndroidManifest.xml #generated:9
+-keep class esos.MobiBench.MobiBench { <init>(...); }
+
+# view AndroidManifest.xml #generated:22
+-keep class esos.MobiBench.TabMain { <init>(...); }
+
+# view AndroidManifest.xml #generated:27
+-keep class esos.ResultListControl.DialogActivity { <init>(...); }
+
+# view AndroidManifest.xml #generated:28
+-keep class esos.ResultListControl.Webview { <init>(...); }
+

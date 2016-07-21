@@ -1,0 +1,20 @@
+[user]
+	name = Jaegeuk Kim
+	email = jaegeuk@kernel.org
+[core]
+	editor = vim
+	ignorecase = true
+[merge]
+	tool = vimdiff
+[color]
+	status = auto
+	branch = auto
+	interactive = auto
+	diff = auto
+[sendemail]
+	smtpserver = /opt/local/bin/msmtp
+	smtpserverport = 587
+	smtpencryption = tls
+	from = Jaegeuk Kim <jaegeuk@kernel.org>
+	smtpuser = jaegeuk
+	smtppass = 0BSRQoAnEtXreAv9

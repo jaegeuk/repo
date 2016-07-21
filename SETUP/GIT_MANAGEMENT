@@ -1,0 +1,60 @@
+1. Config
+git config --global user.signingkey 824850D2
+
+2. Push [DELETION]
+git subtree add -P AOSP/android-simg2img https://github.com/anestisb/android-simg2img.git master
+git push origin dev
+git push orign :heads/dev <- 지우기
+git push orign :tags/for-f2fs-3.xx <- 지우기
+git branch -d -r origin/linux-2.6.11.y
+
+3. Rebase
+git rebase -i HEAD~4
+git checkout android, ~~~
+git rebase --onto [current HEAD] [remote start - 1] [remote end]
+
+4. Checkout
+git checkout master
+git checkout dev-v3.10
+git rebase --onto stable-v3.10 [start_commit] HEAD
+ : cherry-pick between start~HEAD in dev-v3.10 to stable-v3.10
+
+5. Diff
+git diff -M 97bf6af..2155355
+git diff --stat -M 97bf6af..2155355
+
+6. Patch work
+git format-patch -o /tmp/ --signoff master..my_branch
+git am *.patch
+git am --3way
+git add files
+git am --resolved
+git format-patch --full-index --binary --stdout start..end | git am -3
+
+7. Email
+git send-email ~~~.patch
+
+8. Pull request
+git tag -s for-f2fs-3.8 [commit id: HEAD]
+git push --tags origin dev
+git request-pull [시작 commit id: linus 기준] git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs.git tags/for-3.8
+
+9. Remote
+git remote add linus git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+git fetch linus
+git merge linus/master
+git fetch git://remote_branch
+
+10. cherry-pick other git branches
+git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-tools.git
+git fetch upstream
+git merge upstream/master
+   or, git cherry-pick <first_commit>..<last_commit>
+
+11. remote cherry-pick
+git checkout -b test
+git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs.git
+git fetch upstream
+git log upstream/linux-3.10
+git log upstream/linux-3.10 --committer="Jaegeuk Kim" 48b230a.. --pretty="%h %s" --reverse --not --remotes=origin
+git log upstream/linux-3.10 --committer="Jaegeuk Kim" 48b230a.. --pretty=%h --reverse --not --remotes=origin | git cherry-pick --stdin

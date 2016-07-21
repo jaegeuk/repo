@@ -1,0 +1,69 @@
+From f0efaeb2d76d8709bc47d0699c658d301edaf412 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Fri, 24 Apr 2015 09:14:45 +0900
+Subject: [PATCH] use_f2fs
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ misc/e4crypt.c | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/misc/e4crypt.c b/misc/e4crypt.c
+index b99421a..0472e1f 100644
+--- a/misc/e4crypt.c
++++ b/misc/e4crypt.c
+@@ -69,6 +69,7 @@ typedef __s32 key_serial_t;
+ #define OPT_QUIET	0x0002
+ 
+ int options;
++int use_f2fs = 0;
+ 
+ static long keyctl(int cmd, ...)
+ {
+@@ -90,6 +91,7 @@ static const size_t hexchars_size = 16;
+ #define SHA512_LENGTH 64
+ #define EXT2FS_KEY_TYPE_LOGON "logon"
+ #define EXT2FS_KEY_DESC_PREFIX "ext4:"
++#define F2FS_KEY_DESC_PREFIX "f2fs:"
+ #define EXT2FS_KEY_DESC_PREFIX_SIZE 5
+ 
+ #define EXT4_IOC_SET_ENCRYPTION_POLICY      _IOR('f', 19, struct ext4_encryption_policy)
+@@ -541,14 +543,15 @@ static void insert_key_into_keyring(const char *keyring, struct salt *salt)
+ 	struct ext4_encryption_key key;
+ 	char key_ref_full[EXT2FS_KEY_DESC_PREFIX_SIZE +
+ 			  EXT4_KEY_REF_STR_BUF_SIZE];
++	char *key_desc_prefix = use_f2fs ? F2FS_KEY_DESC_PREFIX :
++					EXT2FS_KEY_DESC_PREFIX;
+ 	int rc;
+ 
+ 	if (keyring_id == 0) {
+ 		printf("Invalid keyring [%s].\n", keyring);
+ 		exit(1);
+ 	}
+-	sprintf(key_ref_full, "%s%s", EXT2FS_KEY_DESC_PREFIX,
+-		salt->key_ref_str);
++	sprintf(key_ref_full, "%s%s", key_desc_prefix, salt->key_ref_str);
+ 	rc = keyctl(KEYCTL_SEARCH, keyring_id, EXT2FS_KEY_TYPE_LOGON,
+ 		    key_ref_full, 0);
+ 	if (rc != -1) {
+@@ -594,6 +597,7 @@ void get_default_salts(void)
+ 
+ 	while (f && ((mnt = getmntent(f)) != NULL)) {
+ 		if (strcmp(mnt->mnt_type, "ext4") ||
++		    strcmp(mnt->mnt_type, "f2fs") ||
+ 		    access(mnt->mnt_dir, R_OK))
+ 			continue;
+ 		parse_salt(mnt->mnt_dir, PARSE_FLAGS_NOTSUPP_OK);
+@@ -644,6 +648,9 @@ void do_add_key(int argc, char **argv, const struct cmd_desc *cmd)
+ 			/* Salt value for passphrase. */
+ 			parse_salt(optarg, 0);
+ 			break;
++		case 'F':
++			use_f2fs = 1;
++			break;
+ 		case 'v':
+ 			options |= OPT_VERBOSE;
+ 			break;
+-- 
+2.1.1
+

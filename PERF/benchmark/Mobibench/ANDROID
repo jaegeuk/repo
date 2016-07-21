@@ -1,0 +1,13 @@
+download android-ndk
+download android-sdk : tools only without IDE
+
+set bashrc
+ - PATH
+ - NDK_PROJECT_PATH=Mobibench
+
+# android update sdk --no-ui
+
+# ndk-build
+# android update project -t android-10 -p .
+
+# ant debug

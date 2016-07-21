@@ -1,0 +1,17 @@
+Generating public/private rsa key pair.
+Your identification has been saved in user_creds/jaegeuk/korg-jaegeuk.
+Your public key has been saved in user_creds/jaegeuk/korg-jaegeuk.pub.
+The key fingerprint is:
+c0:d9:66:96:4d:c3:8d:3a:ae:2d:1a:a8:09:f0:ad:5b jaegeuk@kernel.org
+The key's randomart image is:
++--[ RSA 2048]----+
+|         .oo     |
+|     . o +o..    |
+|      + *..      |
+|       =o        |
+|.      .S.       |
+|.. o    .        |
+|. o E  o         |
+|.o o .o .        |
+|o o... .         |
++-----------------+

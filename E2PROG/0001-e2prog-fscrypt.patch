@@ -1,0 +1,36 @@
+From 2651d98539f5efec7b3769e2dba4acfb5a9803bc Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Wed, 9 Mar 2016 15:02:37 -0800
+Subject: [PATCH 1/2] fscrypt
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ misc/e4crypt.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/misc/e4crypt.c b/misc/e4crypt.c
+index ad95bd2..51437c9 100644
+--- a/misc/e4crypt.c
++++ b/misc/e4crypt.c
+@@ -107,8 +107,8 @@ static const size_t hexchars_size = 16;
+ 
+ #define SHA512_LENGTH 64
+ #define EXT2FS_KEY_TYPE_LOGON "logon"
+-#define EXT2FS_KEY_DESC_PREFIX "ext4:"
+-#define EXT2FS_KEY_DESC_PREFIX_SIZE 5
++#define EXT2FS_KEY_DESC_PREFIX "fscrypt:"
++#define EXT2FS_KEY_DESC_PREFIX_SIZE 8
+ 
+ #define EXT4_IOC_SET_ENCRYPTION_POLICY      _IOR('f', 19, struct ext4_encryption_policy)
+ #define EXT4_IOC_GET_ENCRYPTION_POLICY      _IOW('f', 21, struct ext4_encryption_policy)
+@@ -609,6 +609,7 @@ static void get_default_salts(void)
+ 
+ 	while (f && ((mnt = getmntent(f)) != NULL)) {
+ 		if (strcmp(mnt->mnt_type, "ext4") ||
++		    strcmp(mnt->mnt_type, "f2fs") ||
+ 		    access(mnt->mnt_dir, R_OK))
+ 			continue;
+ 		parse_salt(mnt->mnt_dir, PARSE_FLAGS_NOTSUPP_OK);
+-- 
+1.9.1
+

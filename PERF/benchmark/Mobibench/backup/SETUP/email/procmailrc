@@ -1,0 +1,51 @@
+# Environment variable assignments
+SHELL=/bin/bash
+PATH=/bin:/usr/bin:/usr/local/bin
+VERBOSE=off                   # Turn on for verbose log
+MAILDIR=$HOME/Mail            # Where Procmail recipes deliver
+#DEFAULT=$MAILDIR/mbox
+LOGFILE=$HOME/.procmaillog    # Keep a log for troubleshooting.
+VERBOSE=yes
+
+# Recipes
+:0 Whc: msgid.lock
+| formail -D 32768 ~/.procmail/msgid.cache
+
+:0 a:
+duplicates
+
+:0:
+* ^(From):.*@linkedin.com
+other/mbox
+
+:0:
+* ^(From):.*@samsungcard.com
+other/mbox
+
+:0:
+* ^(From):.*@aliexpress.com
+other/mbox
+
+:0:
+* ^(Cc|To):.*jaegeuk@kernel.org
+f2fs/mbox
+
+:0:
+* ^(Cc|To):.*jaegeuk.kim@gmail.com
+f2fs/mbox
+
+:0:
+* ^(Cc|To):.*jaegeuk.kim@samsung.com
+f2fs/mbox
+
+:0:
+* ^(Cc|To):.*linux-f2fs-devel@lists.sourceforge.net
+f2fs/mbox
+
+:0:
+* ^(Cc|To):.*linux-fsdevel@vger.kernel.org
+fsdev/mbox
+
+:0:
+* ^(Cc|To):.*linux-kernel@vger.kernel.org
+linux/mbox

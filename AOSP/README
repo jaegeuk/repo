@@ -1,0 +1,70 @@
+0. environment
+ - https://source.android.com/source/initializing.html
+ - http://developer.android.com/sdk/index.html
+  : download sdk
+  # tools/android update sdk --no-ui
+  : export PATH=$PATH:/opt/android-sdk-linux/tools
+    export PATH=$PATH:/opt/android-sdk-linux/platform-tools
+    export PATH=$PATH:/opt/android-sdk-linux/build-tools/23.0.2
+
+1. download AOSP
+https://source.android.com/source/downloading.html
+ - MMB29P	android-6.0.1_r8	Marshmallow	Nexus 5X, Nexus 6P
+ - repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.1_r8
+
+2. download kernel (aosp/kernel)
+https://source.android.com/source/building-kernels.html
+ - angler	device/huawei/angler-kernel	kernel/msm	angler_defconfig
+
+3. patches
+ - 0001-f2fs-device-huawei-angler.patch --> aosp/device/huawei/angler
+ - 0001-f2fs-external-f2fs-tools.patch  --> aosp/external/f2fs-tools
+ - 0001-f2fs-system-core-fs_mgr.patch   --> aosp/system/core
+ - 0001-f2fs-kernel.patch               --> kernel
+
+4. build
+ # ./make_kernel.sh
+ # ./make_android.sh
+ # ./make_tools.sh
+ # adb version
+
+5. flash
+ - Settings -> USB debugging
+ - Settings -> enable unlock
+ # fastboot flashing unlock
+
+ # fastboot flash recovery twrp!!!!
+ # fastboot flash boot boot.img
+ # fastboot flash system system.img
+
+ - goto recovery mode
+ # wipe userdata -> format f2fs
+
+6. unpack boot.img
+ - Use mkbootimg_tools/
+ - Use android-simg2img/
+ - scripts/unpack.sh
+
+7. pack boot.img
+ - Use mkbootimg_tools/
+
+================ P9 ====================
+ - Use aarch64-linux-android-4.9, mkbootimg_tools
+
+# git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+# git clone https://github.com/xiaolu/mkbootimg_tools.git
+# git clone https://gitlab.com/paulobrien/android_kernel_huawei_p9plus.git kernel
+# git clone https://github.com/anestisb/android-simg2img.git
+
+# export PATH=$(pwd)/aarch64-linux-android-4.9/bin:$PATH
+# export CROSS_COMPILE=$(pwd)/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+# mkdir out
+# cd kernel
+# make ARCH=arm64 O=../out mrproper
+# make ARCH=arm64 O=../out p9plus_extracted_defconfig
+# make ARCH=arm64 O=../out -j8
+
+# wget -O boot.img http://nigella.modaco.com/files/boot.stock.huaweip9plus.b161.img
+# mkbootimg_tools/mkboot boot.img boot.extracted
+# cp out/arch/arm64/boot/Image.gz boot.extracted/kernel
+# mkbootimg_tools/mkboot boot.extracted boot.newkernel.img

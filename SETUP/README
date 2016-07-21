@@ -1,0 +1,92 @@
+========
+T32
+========
+1. t32marm-qt
+2. run batch
+ -> parse_output/t32_startup_script.cmm
+3. edit -> reg.cmm
+  pc -> r.s pc 0xXX
+  lr -> r.s r14 0xXX
+  psr -> 
+  sp -> r.s r13 0xXX
+  ip -> r.s r12 0xXX
+  fp -> r.s r11 0xXX
+  r10
+  r9
+  r8
+  ...
+4. run batch
+ -> parse_output/reg.com
+
+
+==========
+virtualbox
+==========
+1. make NAT network
+ : Port forwarding -> TCP, 127.0.0.1, 2222, 10.0.2.15, 22
+
+2. edit /etc/hosts
+127.0.0.1	ubuntu
+
+3.
+# ssh -p 2222 kjgkr@ubuntu
+
+=====
+email
+=====
+
+getmailrc 위치는  .getmail/getmailrc
+
+crontab 에 추가
+*/5 * * * * /usr/bin/getmail &> /dev/null
+
+
+{ 단축키 }
+
+도움말 : ?
+$      : 변경사항 업데이트
+d      : 메시지를 지움. '$' 하면 삭제 수행.
+ctrl + n  : 위 (untag 가 필요할때)
+ctrl + p  : 아래
+ctrl + u  : untag (delete)
+j         : 위
+k         : 아래
+c         : mailbox 변경, '?' 눌러서 이동
+y         : mailbox list
+ctrl + g  : 명령어 취소
+w	  : flag 설정
+F         : 중요 플래그 토글
+shift + w : flag 삭제
+shift + d : .* 전체 삭제
+
+메일 안에서 메일보기
+space     : 한페이지 단위 아래로 이동
+-         : 한페이지 위로
+enter     : 한줄 아래로
+backspace : 한줄 위로
+
+v         : 첨부파일저장
+g         : group reply
+r         : reply
+m         : 새 메일 작성
+|         : 메일을 파일로 저장. ex) Pipe command: cat ~/1.patch
+
+s         : mbox에 /tmp/test.mbox 로 해서 저장하면 됨
+
+패치보내기
+g (group reply)
+vi mode 에서 :read ~/0001.patch
+:wq 저장하고 나감.
+y (send)
+
+
+a        : attach file
+
+
+========
+xfstests
+========
+
+# local.config를 복사하고, 실행하면 됨
+# ./reload.f2fs.sh
+# ./check

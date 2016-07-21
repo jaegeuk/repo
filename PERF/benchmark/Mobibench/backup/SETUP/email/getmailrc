@@ -1,0 +1,23 @@
+[options]
+# print out some information
+verbose = 1
+# just read new mails
+read_all = true
+# don't delete the mails on the server
+delete = false
+message_log = ~/.getmail/log
+
+[retriever]
+type = SimplePOP3SSLRetriever
+server = pop.gmail.com
+port = 995
+username = jaegeuk.kim
+password = kjg1210!
+
+[destination]
+type = MDA_external
+path = /opt/local/bin/procmail
+# procmail requires either that the message starts with an mboxrd-style
+# "From " line (which getmail can generate by setting "unixfrom" to True), or
+# that the -f option is provided as below.
+arguments = ("-f", "%(sender)")

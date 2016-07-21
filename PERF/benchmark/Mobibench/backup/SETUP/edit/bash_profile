@@ -1,0 +1,24 @@
+# aliases
+alias cd..="cd .."
+alias vi="vim"
+alias ls="ls -G"
+
+parse_git_branch() {
+
+    git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
+}
+
+export CLICOLOR=1
+export LSCOLORS=GxFxCxDxBxegedabagaced
+export PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch)\[\033[00m\] $ "
+
+sed -n '/ubuntu/d' ~/.ssh/known_hosts > ~/.ssh/known_hosts
+
+##
+# Your previous /Users/JaegeukKim/.bash_profile file was backed up as /Users/JaegeukKim/.bash_profile.macports-saved_2014-05-28_at_01:21:28
+##
+
+# MacPorts Installer addition on 2014-05-28_at_01:21:28: adding an appropriate PATH variable for use with MacPorts.
+export PATH=/opt/local/bin:/opt/local/sbin:$PATH
+# Finished adapting your PATH environment variable for use with MacPorts.
+

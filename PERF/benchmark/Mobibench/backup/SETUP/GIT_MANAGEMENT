@@ -1,0 +1,109 @@
+git config --global user.signingkey 824850D2
+
+
+1. git rebase
+# git checkout master
+# git pull origin master
+# git checkout dev
+# git rebase master
+# git checkout android, ~~~
+
+
+# git push origin HEAD:blmp
+
+
+# git checkout dev-v3.10
+# git rebase --onto stable-v3.10 [start_commit] HEAD
+ : cherry-pick between start~HEAD in dev-v3.10 to stable-v3.10
+
+
+git push origin HEAD:refs/heads/blmp
+
+
+
+$ git diff -M 97bf6af..2155355
+diff --git a/fs/xfs/xfs_fs.h b/fs/xfs/libxfs/xfs_fs.h
+similarity index 100%
+rename from fs/xfs/xfs_fs.h
+rename to fs/xfs/libxfs/xfs_fs.h
+$
+$
+$ git diff --stat -M 97bf6af..2155355
+fs/xfs/{ => libxfs}/xfs_fs.h | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+$
+
+
+2. patch work
+# git format-patch -o /tmp/ --signoff master..my_branch
+# git am *.patch
+# git am --3way
+# resolve files
+# git add files
+# git am --resolved
+# git send-email ~~~.patch
+
+3. git patch merge
+# git rebase -i HEAD~4
+# pick 01d1124 Adding license
+# squash 6340aaa Moving license into its own file
+# squash ebfd367 Jekyll has become self-aware.
+# squash 30e0ccb Changed the tagline in the binary, too.
+
+4. git push
+# git push origin dev
+# git push orign :heads/dev <- 지우기
+# git push orign :tags/for-f2fs-3.xx <- 지우기
+git branch -d -r origin/linux-2.6.11.y
+
+5. git pull request
+# git tag -s for-f2fs-3.8 [commit id: HEAD]
+# git push --tags origin dev
+# git request-pull [시작 commit id: linus 기준] git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs.git tags/for-3.8
+
+6. remote 관리
+# git remote add linus git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+# git fetch linus
+# git merge linus/master
+# git fetch git://remote_branch
+
+7. cherry-pick other git branches
+# git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-tools.git
+# git fetch upstream
+# git merge upstream/master
+or, # git cherry-pick <first_commit>..<last_commit>
+
+8. remote cherry-pick
+# git checkout -b test
+# git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs.git
+# git fetch upstream
+# git log upstream/linux-3.10
+# git log upstream/linux-3.10 --committer="Jaegeuk Kim" 48b230a.. --pretty="%h %s" --reverse --not --remotes=origin
+# git log upstream/linux-3.10 --committer="Jaegeuk Kim" 48b230a.. --pretty=%h --reverse --not --remotes=origin | git cherry-pick --stdin
+
+# git rebase --onto [current HEAD] [remote start - 1] [remote end]
+
+# git format-patch --full-index --binary --stdout start..end | git am -3
+
+9. android
+# git checkout -a [branch name]
+# git revert ####
+# git remote add upstream git://git.kernel.org/pub/scm/linux/kernel/git/jaegeuk/f2fs-tools.git
+# git fetch upstream
+# git log upstream/linux-3.4
+#
+# git push origin HEAD:refs/heads/sandbox/jaegeuk/[branch name]
+# git push origin :refs/heads/sandbox/jaegeuk/[branch name] --- for deletion
+# git reset --soft origin/bkkmr2
+# git commit -a -m "Merge review: ~~~"
+# git push origin HEAD:refs/for/bkkmr2
+# git log origin/sandbox/jaegeuk/[branch name]
+# go Gerrit
+
+# fastboot oem partition dump userdata
+# fastboot oem ramdump pull
+
+10. normal git push to gerrit
+# git checkout -b [branch]
+# add patches~~~~~
+# git push origin HEAD:refs/for/bkkmr2

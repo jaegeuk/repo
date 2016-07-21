@@ -1,0 +1,52 @@
+0. environment
+ - https://source.android.com/source/initializing.html
+ - http://developer.android.com/sdk/index.html
+  : download sdk
+  # tools/android update sdk --no-ui
+  : export PATH=$PATH:/opt/android-sdk-linux/tools
+    export PATH=$PATH:/opt/android-sdk-linux/platform-tools
+    export PATH=$PATH:/opt/android-sdk-linux/build-tools/23.0.2
+
+1. download AOSP
+https://source.android.com/source/downloading.html
+ - MMB29P	android-6.0.1_r8	Marshmallow	Nexus 5X, Nexus 6P
+ - repo init -u https://android.googlesource.com/platform/manifest -b android-6.0.1_r8
+
+2. download kernel (aosp/kernel)
+https://source.android.com/source/building-kernels.html
+ - angler	device/huawei/angler-kernel	kernel/msm	angler_defconfig
+
+3. patches
+ - 0001-f2fs-device-huawei-angler.patch --> aosp/device/huawei/angler
+ - 0001-f2fs-external-f2fs-tools.patch  --> aosp/external/f2fs-tools
+ - 0001-f2fs-system-core-fs_mgr.patch   --> aosp/system/core
+ - 0001-f2fs-kernel.patch               --> kernel
+
+4. build
+ # ./make_kernel.sh
+ # ./make_android.sh
+ # ./make_tools.sh
+ # adb version
+
+5. flash
+ - Settings -> USB debugging
+ - Settings -> enable unlock
+ # fastboot flashing unlock
+
+ # fastboot flash recovery twrp!!!!
+ # fastboot flash boot boot.img
+ # fastboot flash system system.img
+
+ - goto recovery mode
+ # wipe userdata -> format f2fs
+
+6. download gapps
+ - git clone https://github.com/opengapps/opengapps
+ - chagne .git/config
+   all.git -> use https://github.com/opengapps/all.git
+   arm.git -> use https://github.com/opengapps/arm.git
+   arm64.git -> use https://github.com/opengapps/arm64.git
+
+ # ./download_sources.sh --shallow arm64
+ # make arm64-23-stock
+ # adb sideload ~~~.zip

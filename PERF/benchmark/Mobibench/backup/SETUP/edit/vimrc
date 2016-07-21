@@ -1,0 +1,15 @@
+syntax on
+filetype on
+
+"ctags
+set tags=tags
+
+set ru
+set si
+set ai
+set hls
+set number
+set nocp
+set laststatus=2
+
+source ~/.cscope_maps.vim

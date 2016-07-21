@@ -1,0 +1,9 @@
+fastboot oem config console "ttyHSL0,115200,n8 earlyprintk"
+to enable serial console
+
+./prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-gdb vmlinux
+
+(gdb) info address find_target_dentry
+Symbol "find_target_dentry" is a function at address 0xc0321b2c.
+(gdb) info line *(0xc0321b2c+0x58)
+Line 105 of "../../../../../../kernel/include/asm-generic/bitops/non-atomic.h" starts at address 0xc0321b6c <find_target_dentry+64> and ends at 0xc0321b8c <find_target_dentry+96>.

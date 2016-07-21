@@ -1,0 +1,111 @@
+[ALL MON/OSD NODES: testall/perf]
+sudo useradd -d /home/ceph_test -m ceph_test
+sudo passwd ceph_test
+echo "ceph_test ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph_test
+sudo chmod 0440 /etc/sudoers.d/ceph_test
+sudo chsh -s /bin/bash ceph_test
+
+[ADMIN: gateway]
+ssh-keygen
+ssh-copy-id ceph_test@testall
+ssh-copy-id ceph_test@perf
+
+~/.ssh/config
+Host testall
+	Hostname testall
+	User ceph_test
+Host perf
+	Hostname perf
+	User ceph_test
+
+wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+echo deb http://download.ceph.com/debian-infernalis/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+ceph-deploy 
+sudo apt-get update && sudo apt-get install ceph-deploy
+
+- Admin : gateway
+- Mon : gateway
+- OSD : testall/perf
+
+ceph-deploy new gateway
+
+==> osd pool default size = 2
+
+ceph-deploy install --release infernalis gateway testall perf
+
+ceph-deploy mon create-initial
+ - ceph-deploy mon create gateway
+ - ceph-deploy gatherkeys gateway
+
+ceph-deploy disk list perf
+ceph-deploy disk zap perf:sdb perf:sdc
+ceph-deploy osd prepare perf:sdb perf:sdc
+ceph-deploy osd activate perf:sdb1 perf:sdc1
+
+
+ceph-deploy admin gateway testall perf
+sudo chmod +r /etc/ceph/ceph.client.admin.keyring
+
+
+
+
+
+
+sudo stop ceph-all
+
+ceph status
+ceph -w
+ceph health detail
+ceph df
+ceph mon stat
+ceph quorum_status
+ceph-deploy admin admin-node
+
+ceph osd lspools
+ceph osd tree
+ceph osd stat
+ceph osd dump
+
+
+ceph osd pool set <poolname> min_size 1
+
+
+#####################
+in ceph.conf
+
+[global]
+osd crush chooseleaf type = 0
+osd pool default size = 2
+
+[osd]
+osd_journal_size = 1024
+#####################
+
+
+-- key mismatch --> ceph auth del osd.0
+
+### REMOVE ###
+ceph osd out osd.0
+ceph osd down osd.0
+ceph osd rm osd.0
+ceph auth del osd.0
+
+### ADD ###
+ceph osd create
+sudo mkfs.f2fs /dev/sdb1
+sudo mount -o user_xattr /dev/sdb1 /var/lib/ceph/osd/ceph-0
+sudo ceph-osd -i 0 --mkfs --mkkey
+
+
+
+
+
+
+
+1. How do I fix 'ImportError: cannot import name IncompleteRead'?
+
+$ sudo apt-get purge python-requests
+[now requests and pip gets deinstalled]
+$ sudo apt-get install python-requests python-pip
+
+

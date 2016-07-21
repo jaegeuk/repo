@@ -1,0 +1,171 @@
+From 0e82fb331b328286bba7e8fdb39515413e20a414 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Wed, 9 Mar 2016 16:28:21 -0800
+Subject: [PATCH 2/2] set_key
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ misc/e4crypt.c | 91 +++++++++++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 84 insertions(+), 7 deletions(-)
+
+diff --git a/misc/e4crypt.c b/misc/e4crypt.c
+index 51437c9..f2673a1 100644
+--- a/misc/e4crypt.c
++++ b/misc/e4crypt.c
+@@ -75,6 +75,8 @@ typedef __s32 key_serial_t;
+ #define OPT_QUIET	0x0002
+ 
+ int options;
++int use_f2fs = 0;
++int delete = 0;
+ 
+ #ifndef HAVE_KEYCTL
+ static long keyctl(int cmd, ...)
+@@ -110,6 +112,22 @@ static const size_t hexchars_size = 16;
+ #define EXT2FS_KEY_DESC_PREFIX "fscrypt:"
+ #define EXT2FS_KEY_DESC_PREFIX_SIZE 8
+ 
++#define F2FS_KEY_DESC_PREFIX "f2fs:"
++#define F2FS_KEY_DESC_PREFIX_SIZE 5
++
++#define F2FS_KEY_SIZE	8
++
++enum f2fs_key_mode {
++	F2FS_SET_KEY,
++	F2FS_DROP_KEY,
++};
++
++struct f2fs_key {
++	unsigned char key[F2FS_KEY_SIZE];
++	unsigned char mode;
++};
++#define F2FS_IOC_KEYCTL		_IOW(0xf5, 9, struct f2fs_key)
++
+ #define EXT4_IOC_SET_ENCRYPTION_POLICY      _IOR('f', 19, struct ext4_encryption_policy)
+ #define EXT4_IOC_GET_ENCRYPTION_POLICY      _IOW('f', 21, struct ext4_encryption_policy)
+ 
+@@ -142,7 +160,7 @@ static void validate_paths(int argc, char *argv[], int path_start_index)
+ 		ret = stat(argv[x], &st);
+ 		if (ret < 0)
+ 			goto invalid;
+-		if (!S_ISDIR(st.st_mode)) {
++		if (!use_f2fs && !S_ISDIR(st.st_mode)) {
+ 			fprintf(stderr, "%s is not a directory\n", argv[x]);
+ 			goto invalid;
+ 		}
+@@ -402,6 +420,45 @@ static void set_policy(struct salt *set_salt, int pad,
+ 	}
+ }
+ 
++static void set_f2fs_key(int argc, char *argv[], int path_start_index)
++{
++	struct salt *salt;
++	struct f2fs_key key;
++	uuid_t	uu;
++	int fd;
++	int x;
++	int rc;
++
++	for (x = path_start_index; x < argc; x++) {
++		fd = open(argv[x], O_RDONLY);
++		if (fd == -1) {
++			perror(argv[x]);
++			exit(1);
++		}
++		if (ioctl(fd, EXT4_IOC_GET_ENCRYPTION_PWSALT,
++			  &uu) < 0) {
++			perror("EXT4_IOC_GET_ENCRYPTION_PWSALT");
++			exit(1);
++		}
++		salt = find_by_salt(uu, sizeof(uu));
++		if (!salt) {
++			fprintf(stderr, "Couldn't find salt!?!\n");
++			exit(1);
++		}
++		memcpy(key.key, salt->key_desc, F2FS_KEY_SIZE);
++		key.mode = !delete ? F2FS_SET_KEY: F2FS_DROP_KEY;
++		rc = ioctl(fd, F2FS_IOC_KEYCTL, &key);
++		close(fd);
++		if (rc) {
++			printf("Error [%s] setting f2fs key, descriptor:%s\n",
++			       strerror(errno), salt->key_ref_str);
++			continue;
++		}
++		printf("Key with descriptor [%s] applied to %s.\n",
++		       salt->key_ref_str, argv[x]);
++	}
++}
++
+ static void pbkdf2_sha512(const char *passphrase, struct salt *salt,
+ 			  unsigned int count,
+ 			  unsigned char derived_key[EXT4_MAX_KEY_SIZE])
+@@ -559,7 +616,10 @@ static void insert_key_into_keyring(const char *keyring, struct salt *salt)
+ {
+ 	int keyring_id = get_keyring_id(keyring);
+ 	struct ext4_encryption_key key;
+-	char key_ref_full[EXT2FS_KEY_DESC_PREFIX_SIZE +
++	char *key_ref_full;
++	char base_key_ref_full[EXT2FS_KEY_DESC_PREFIX_SIZE +
++			  EXT4_KEY_REF_STR_BUF_SIZE];
++	char f2fs_key_ref_full[F2FS_KEY_DESC_PREFIX_SIZE +
+ 			  EXT4_KEY_REF_STR_BUF_SIZE];
+ 	int rc;
+ 
+@@ -567,8 +627,15 @@ static void insert_key_into_keyring(const char *keyring, struct salt *salt)
+ 		printf("Invalid keyring [%s].\n", keyring);
+ 		exit(1);
+ 	}
+-	sprintf(key_ref_full, "%s%s", EXT2FS_KEY_DESC_PREFIX,
+-		salt->key_ref_str);
++	if (use_f2fs) {
++		sprintf(f2fs_key_ref_full, "%s%s", F2FS_KEY_DESC_PREFIX,
++			salt->key_ref_str);
++		key_ref_full = f2fs_key_ref_full;
++	} else {
++		sprintf(base_key_ref_full, "%s%s", EXT2FS_KEY_DESC_PREFIX,
++			salt->key_ref_str);
++		key_ref_full = base_key_ref_full;
++	}
+ 	rc = keyctl(KEYCTL_SEARCH, keyring_id, EXT2FS_KEY_TYPE_LOGON,
+ 		    key_ref_full, 0);
+ 	if (rc != -1) {
+@@ -648,7 +715,7 @@ static void do_add_key(int argc, char **argv, const struct cmd_desc *cmd)
+ 	int i, opt, pad = 4;
+ 	unsigned j;
+ 
+-	while ((opt = getopt(argc, argv, "k:S:p:vq")) != -1) {
++	while ((opt = getopt(argc, argv, "FDk:S:p:vq")) != -1) {
+ 		switch (opt) {
+ 		case 'k':
+ 			/* Specify a keyring. */
+@@ -657,6 +724,12 @@ static void do_add_key(int argc, char **argv, const struct cmd_desc *cmd)
+ 		case 'p':
+ 			pad = atoi(optarg);
+ 			break;
++		case 'F':
++			use_f2fs = 1;
++			break;
++		case 'D':
++			delete = 1;
++			break;
+ 		case 'S':
+ 			/* Salt value for passphrase. */
+ 			parse_salt(optarg, 0);
+@@ -692,8 +765,12 @@ static void do_add_key(int argc, char **argv, const struct cmd_desc *cmd)
+ 		generate_key_ref_str(salt);
+ 		insert_key_into_keyring(keyring, salt);
+ 	}
+-	if (optind != argc)
+-		set_policy(NULL, pad, argc, argv, optind);
++	if (optind != argc) {
++		if (use_f2fs)
++			set_f2fs_key(argc, argv, optind);
++		else
++			set_policy(NULL, pad, argc, argv, optind);
++	}
+ 	clear_secrets();
+ 	exit(0);
+ }
+-- 
+1.9.1
+

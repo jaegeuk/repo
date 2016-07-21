@@ -1,0 +1,188 @@
+
+
+gpg --import jaegeuk-public.key
+gpg --import jaegeuk-private.key
+
+This is a standard message for new kernel.org account holders. PLEASE
+READ THIS WHOLE MESSAGE. IT CONTAINS EXTREMELY IMPORTANT INFORMATION.
+
+Your account is personal. Do not give your ssh key or any of your other
+kernel.org credentials to any other person for any purpose. Contact
+<rt@kernel.org> if someone else has a legitimate need for access.
+
+Your ssh private key
+--------------------
+This tarball contains the following files:
+
+Your kernel.org ssh private key : korg-jaegeuk
+Output of ssh-keygen command    : ssh_keygen.output
+
+Move korg-jaegeuk into your ~/.ssh directory.
+
+Your ssh private key is protected with the following passphrase:
+NuwokyophfadlybIackJesvo
+
+You can change this passphrase using "ssh-keygen -p". ALWAYS KEEP YOUR
+SSH KEY PROTECTED WITH A PASSPHRASE!
+
+Kernel.org access
+-----------------
+Your kernel.org account grants you access to two systems:
+
+  * gitolite.kernel.org : for accessing your git trees
+  * kup.kernel.org      : for uploading tarball releases
+
+gitolite.kernel.org
+    SSH RSA key fingerprint: b1:33:44:9d:3f:77:59:14:f8:05:d7:33:5d:b1:40:7b
+    SSH DSA key fingerprint: f7:ec:e1:24:17:2b:33:69:46:69:f1:41:99:1e:a8:90
+
+kup.kernel.org
+    SSH RSA key fingerprint: 9f:ab:65:9c:fd:4e:40:38:87:ba:c6:0c:b1:a8:95:fb
+    SSH DSA key fingerprint: 99:a3:9b:fc:78:c5:44:6b:3d:7d:4b:98:cc:60:31:06
+
+You need to add the following entries to your ~/.ssh/config:
+
+    Host gitolite.kernel.org
+        User gitolite
+        IdentityFile ~/.ssh/korg-jaegeuk
+
+    Host kup.kernel.org
+        User jaegeuk
+        IdentityFile ~/.ssh/korg-jaegeuk
+
+Crash course on using gitolite v2
+---------------------------------
+EXTREMELY IMPORTANT: Do not upload non-Open Source software without
+special prior permission. This includes binaries of software intended
+to be Open Source for which source code isn't actually available yet.
+IN PARTICULAR, do not upload non-Open Source cryptographic software,
+or cryptographic binaries from source not available on the Internet,
+under any circumstances. This is absolutely essential.
+
+You can find the upstream documentation for gitolite at their website:
+
+https://github.com/sitaramc/gitolite
+
+or more specifically their documentation:
+
+http://sitaramc.github.com/gitolite/
+
+The basics however are straight forward, you have been automatically granted
+a wildcard space under /pub/scm/linux/kernel/git/jaegeuk/
+
+To create a repository under there either push to the path you want or
+perform a git clone. Either of these will create the repository for
+you.
+
+Example using "git clone":
+
+    git clone gitolite.kernel.org:/pub/scm/linux/kernel/git/jaegeuk/foobar
+
+When cloning a tree that already exists on kernel.org, you will use
+the gitolite built in cloning system:
+
+    ssh gitolite.kernel.org fork [repo to fork from] [repo to fork to]
+
+This will take care of the git clone, and uses Shared (-s), and Linked (-l) git
+options.
+
+E.g. for a Linux kernel repository you should start by forking Linus'
+repository:
+
+    ssh gitolite.kernel.org fork \
+        /pub/scm/linux/kernel/git/torvalds/linux.git \
+        /pub/scm/linux/kernel/git/jaegeuk/linux.git
+
+Please read through the git help sections to understand all the complications
+and possible issues that might arise from using these options.
+
+Additional commands for gitolite you should be made aware of:
+
+    rm      - delete repository you have access to
+              More details on these can be found at:
+              http://sitaramc.github.com/gitolite/g2/wild_repodel.html
+
+    help    - displays a help message for what commands are enabled
+
+    info    - displays the permissions you have to various 
+    expand  - displays the permissions you have to various including
+              those set by setperms by the repository owner
+
+    setdesc - sets the gitweb description for a repository (takes
+              input from stdin). E.g.:
+              echo "My Description here" | \
+                  ssh gitolite.kernel.org setdesc /my/repo/goes/here
+
+Note: at this time there are no user changeable permissions for a repository.
+      Should you need this, you must contact rt@kernel.org.
+
+Please don't put software in non-obvious locations because you happen to have
+write permission there. Instead, please contact <rt@kernel.org> and request
+that additional directories be set up. A confusing setup of the archive is a
+disservice to all users.
+
+Crash course on using kup
+-------------------------
+Kernel.org uploader (kup) is a Perl program that was written for the sole
+purpose of making sure that any software uploaded to kernel.org is
+cryptographically verified against a list of pre-approved maintainers.
+
+Kup is packaged for most distributions and is probably installable using your
+distribution's package management tools. You can also check out the git tree
+to obtain the latest version of kup:
+
+    git clone git://git.kernel.org/pub/scm/utils/kup/kup.git
+
+Set your ~/.kuprc as follows (requires kup >= 0.3.2):
+
+    rsh = ssh -a -x -T -i /home/jaegeuk/.ssh/korg-jaegeuk
+    host = jaegeuk@kup.kernel.org
+
+That should be all you need to do. You may test things by running:
+
+    kup ls /pub
+
+If that is not working, please contact rt@kernel.org for support.
+
+Please carefully read the manpages provided by kup. They tell you all you need
+to know about uploading to kup.kernel.org.
+
+You can test kup by uploading into a special /test directory:
+
+    kup put foo.tar foo.tar.asc /test/foo.tar.gz
+
+Please remove anything you put there after you are done:
+
+    kup rm /test/foo.tar.gz
+
+Anything uploaded to /pub will be rsynced to kernel.org frontends and will be
+available on http://kernel.org/pub after a few minutes.
+
+If you find that some directories do not have the correct permissions, or if
+you need to set up groups in order to allow multiple developers write access,
+please send a request to rt@kernel.org.
+
+Legal notice
+------------
+Due to U.S. regulations on export of cryptography, you have to agree
+to the following legal statement on cryptographic software. By
+logging in and using your account, you're agreeing to the following:
+
+    This site includes publicly available encryption source code
+    which, together with object code resulting from the compiling of
+    publicly available source code, may be exported from the United
+    States under License Exception "TSU" pursuant to 15 C.F.R. Section
+    740.13(e).
+
+This legal notice applies to cryptographic software only. Please see
+the Bureau of Industry and Security (http://www.bis.doc.gov/) for more
+information about current U.S. regulations.
+
+If you cannot agree to that, do not log in, and contact <rt@kernel.org>
+immediately.
+
+Thanks!
+
+-- 
+The kernel.org administration team
+rt@kernel.org

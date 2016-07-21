@@ -1,0 +1,48 @@
+From 9240cfac56d32749ac7183a16c6ea436a20e738b Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Thu, 7 Jan 2016 19:17:30 -0800
+Subject: [PATCH] f2fs: Cynogenmod/AOSP support
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ fs/f2fs/data.c | 6 ++++--
+ fs/f2fs/f2fs.h | 2 +-
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
+index b745bc0..6db44fb 100644
+--- a/fs/f2fs/data.c
++++ b/fs/f2fs/data.c
+@@ -1756,12 +1756,14 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
+ 	return err;
+ }
+ 
+-void f2fs_invalidate_page(struct page *page, unsigned long offset)
++void f2fs_invalidate_page(struct page *page, unsigned int offset,
++							unsigned int length)
+ {
+ 	struct inode *inode = page->mapping->host;
+ 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+ 
+-	if (inode->i_ino >= F2FS_ROOT_INO(sbi) && (offset % PAGE_SIZE))
++	if (inode->i_ino >= F2FS_ROOT_INO(sbi) &&
++		(offset % PAGE_SIZE || length != PAGE_SIZE))
+ 		return;
+ 
+ 	if (PageDirty(page)) {
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index bebcaea..fd62750 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -2123,7 +2123,7 @@ struct page *get_new_data_page(struct inode *, struct page *, pgoff_t, bool);
+ int do_write_data_page(struct f2fs_io_info *);
+ int f2fs_map_blocks(struct inode *, struct f2fs_map_blocks *, int, int);
+ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *, u64, u64);
+-void f2fs_invalidate_page(struct page *, unsigned long);
++void f2fs_invalidate_page(struct page *, unsigned int, unsigned int);
+ int f2fs_release_page(struct page *, gfp_t);
+ 
+ /*
+-- 
+1.9.1
+
