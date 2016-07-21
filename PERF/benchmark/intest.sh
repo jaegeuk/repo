@@ -1,6 +1,7 @@
 #!/system/bin/sh
 
-RES=/mnt/obb/result
+TMP=/tmp
+RES=$TMP/result
 
 rm $RES
 
@@ -23,13 +24,13 @@ __test()
 
 		_init
 		echo -ne "$i :" >> $RES
-		nice -n -20 /mnt/obb/tiotest -a $i -f 1024 -b $((512*1024)) -t 1 -k 1 -k 2 -k 3 -d /data/ | grep -i "Write        1024 MBs" >> $RES
+		nice -n -20 $TMP/tiotest -a $i -f 1024 -b $((512*1024)) -t 1 -k 1 -k 2 -k 3 -d /data/ | grep -i "Write        1024 MBs" >> $RES
 		if [ $? -eq 1 ]; then
 			break
 		fi
 		_init
 		echo -ne "$i :" >> $RES
-		nice -n -20 /mnt/obb/tiotest -a $i -f 1024 -b 4096 -r 50000 -t 1 -k 0 -k 2 -k 3 -d /data/ | grep -i "Random Write  195 MBs" >> $RES
+		nice -n -20 $TMP/tiotest -a $i -f 1024 -b 4096 -r 50000 -t 1 -k 0 -k 2 -k 3 -d /data/ | grep -i "Random Write  195 MBs" >> $RES
 		if [ $? -eq 1 ]; then
 			break
 		fi

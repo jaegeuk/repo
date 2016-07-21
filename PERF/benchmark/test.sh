@@ -1,8 +1,10 @@
 #!/bin/bash
 
-RES=/mnt/obb/result
+TMP=/tmp
 
-adb wait-for-device
+RES=$TMP/result
+
+#adb wait-for-device
 adb root
 sleep 1
 
@@ -26,15 +28,22 @@ __stop()
 	adb shell umount /mnt/runtime/write/emulated
 }
 
-adb wait-for-device
+__parse()
+{
+	grep -i "Write        1024 MBs" $1 | awk '{ print $10 }' > $1_SEQ_WRITE
+	grep -i "Random Write  195 MBs" $1 | awk '{ print $11 }' > $1_RAND_WRITE
+}
+
+#adb wait-for-device
 __stop
-adb push bin/tiotest /mnt/obb/
-adb push intest.sh /mnt/obb/
+adb push bin/tiotest $TMP
+adb push intest.sh $TMP
 
-adb shell "echo 20 >  /sys/fs/f2fs/mmcblk0p44/min_fsync_blocks"
-adb shell /mnt/obb/intest.sh
+#adb shell "echo 20 >  /sys/fs/f2fs/mmcblk0p44/min_fsync_blocks"
+adb shell $TMP/intest.sh
 
-adb pull /mnt/obb/result
+adb pull $TMP/result
+FS=`adb shell mount | grep /data | awk '{ print $3 }'`
+mv result "$FS"_result
 
-#adb shell "echo 6 >  /sys/fs/f2fs/mmcblk0p44/min_fsync_blocks"
-#adb shell /mnt/obb/intest.sh
+__parse "$FS"_result
