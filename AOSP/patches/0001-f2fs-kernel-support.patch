@@ -1,4 +1,4 @@
-From 9cb327e8bd09eeccff25f343d368904f85114623 Mon Sep 17 00:00:00 2001
+From ecf42182645ca941d589d2f6784e00719ac7a015 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Wed, 13 Jan 2016 10:49:27 -0800
 Subject: [PATCH] f2fs: kernel support
@@ -19,11 +19,13 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  fs/f2fs/data.c                      |  751 +--------------
  fs/f2fs/debug.c                     |  354 +------
  fs/f2fs/dir.c                       |  666 +------------
+ fs/f2fs/extent_cache.c              |    1 +
  fs/f2fs/f2fs.h                      | 1137 +---------------------
  fs/f2fs/file.c                      |  664 +------------
  fs/f2fs/gc.c                        |  730 +-------------
  fs/f2fs/gc.h                        |  103 +-
  fs/f2fs/hash.c                      |  102 +-
+ fs/f2fs/inline.c                    |    1 +
  fs/f2fs/inode.c                     |  276 +-----
  fs/f2fs/namei.c                     |  534 +----------
  fs/f2fs/node.c                      | 1799 +---------------------------------
@@ -31,7 +33,10 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  fs/f2fs/recovery.c                  |  403 +-------
  fs/f2fs/segment.c                   | 1800 +----------------------------------
  fs/f2fs/segment.h                   |  638 +------------
+ fs/f2fs/shrinker.c                  |    1 +
  fs/f2fs/super.c                     |  792 +--------------
+ fs/f2fs/trace.c                     |    1 +
+ fs/f2fs/trace.h                     |    1 +
  fs/f2fs/xattr.c                     |  448 +--------
  fs/f2fs/xattr.h                     |  146 +--
  include/linux/dcache.h              |    2 +
@@ -40,7 +45,7 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  include/linux/fscrypto.h            |    1 +
  include/trace/events/f2fs.h         |  683 +------------
  include/uapi/linux/fs.h             |   18 +
- 33 files changed, 67 insertions(+), 14107 deletions(-)
+ 38 files changed, 72 insertions(+), 14107 deletions(-)
  create mode 120000 fs/crypto
  mode change 100644 => 120000 fs/f2fs/Kconfig
  mode change 100644 => 120000 fs/f2fs/Makefile
@@ -50,11 +55,13 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mode change 100644 => 120000 fs/f2fs/data.c
  mode change 100644 => 120000 fs/f2fs/debug.c
  mode change 100644 => 120000 fs/f2fs/dir.c
+ create mode 120000 fs/f2fs/extent_cache.c
  mode change 100644 => 120000 fs/f2fs/f2fs.h
  mode change 100644 => 120000 fs/f2fs/file.c
  mode change 100644 => 120000 fs/f2fs/gc.c
  mode change 100644 => 120000 fs/f2fs/gc.h
  mode change 100644 => 120000 fs/f2fs/hash.c
+ create mode 120000 fs/f2fs/inline.c
  mode change 100644 => 120000 fs/f2fs/inode.c
  mode change 100644 => 120000 fs/f2fs/namei.c
  mode change 100644 => 120000 fs/f2fs/node.c
@@ -62,7 +69,10 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mode change 100644 => 120000 fs/f2fs/recovery.c
  mode change 100644 => 120000 fs/f2fs/segment.c
  mode change 100644 => 120000 fs/f2fs/segment.h
+ create mode 120000 fs/f2fs/shrinker.c
  mode change 100644 => 120000 fs/f2fs/super.c
+ create mode 120000 fs/f2fs/trace.c
+ create mode 120000 fs/f2fs/trace.h
  mode change 100644 => 120000 fs/f2fs/xattr.c
  mode change 100644 => 120000 fs/f2fs/xattr.h
  mode change 100644 => 120000 include/linux/f2fs_fs.h
@@ -70,10 +80,10 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mode change 100644 => 120000 include/trace/events/f2fs.h
 
 diff --git a/arch/arm64/configs/angler_defconfig b/arch/arm64/configs/angler_defconfig
-index 3202cd5..c99a902 100644
+index ca14d1c..18f5464 100644
 --- a/arch/arm64/configs/angler_defconfig
 +++ b/arch/arm64/configs/angler_defconfig
-@@ -594,6 +594,13 @@ CONFIG_MSM_TZ_LOG=y
+@@ -593,6 +593,13 @@ CONFIG_MSM_TZ_LOG=y
  CONFIG_EXT4_FS=y
  CONFIG_EXT4_FS_SECURITY=y
  CONFIG_EXT4_FS_ENCRYPTION=y
@@ -3314,6 +3324,14 @@ index 0000000..4017b46
 @@ -0,0 +1 @@
 +/root/f2fs-stable/fs/f2fs/dir.c
 \ No newline at end of file
+diff --git a/fs/f2fs/extent_cache.c b/fs/f2fs/extent_cache.c
+new file mode 120000
+index 0000000..e1bff8e
+--- /dev/null
++++ b/fs/f2fs/extent_cache.c
+@@ -0,0 +1 @@
++/root/f2fs-stable/fs/f2fs/extent_cache.c
+\ No newline at end of file
 diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
 deleted file mode 100644
 index 20aab02..0000000
@@ -6114,6 +6132,14 @@ index 0000000..5a7d875
 +++ b/fs/f2fs/hash.c
 @@ -0,0 +1 @@
 +/root/f2fs-stable/fs/f2fs/hash.c
+\ No newline at end of file
+diff --git a/fs/f2fs/inline.c b/fs/f2fs/inline.c
+new file mode 120000
+index 0000000..66b029b
+--- /dev/null
++++ b/fs/f2fs/inline.c
+@@ -0,0 +1 @@
++/root/f2fs-stable/fs/f2fs/inline.c
 \ No newline at end of file
 diff --git a/fs/f2fs/inode.c b/fs/f2fs/inode.c
 deleted file mode 100644
@@ -12028,6 +12054,14 @@ index 0000000..d33388d
 @@ -0,0 +1 @@
 +/root/f2fs-stable/fs/f2fs/segment.h
 \ No newline at end of file
+diff --git a/fs/f2fs/shrinker.c b/fs/f2fs/shrinker.c
+new file mode 120000
+index 0000000..f871923
+--- /dev/null
++++ b/fs/f2fs/shrinker.c
+@@ -0,0 +1 @@
++/root/f2fs-stable/fs/f2fs/shrinker.c
+\ No newline at end of file
 diff --git a/fs/f2fs/super.c b/fs/f2fs/super.c
 deleted file mode 100644
 index 8555f7d..0000000
@@ -12832,6 +12866,22 @@ index 0000000..b1545e7
 +++ b/fs/f2fs/super.c
 @@ -0,0 +1 @@
 +/root/f2fs-stable/fs/f2fs/super.c
+\ No newline at end of file
+diff --git a/fs/f2fs/trace.c b/fs/f2fs/trace.c
+new file mode 120000
+index 0000000..f84a03d
+--- /dev/null
++++ b/fs/f2fs/trace.c
+@@ -0,0 +1 @@
++/root/f2fs-stable/fs/f2fs/trace.c
+\ No newline at end of file
+diff --git a/fs/f2fs/trace.h b/fs/f2fs/trace.h
+new file mode 120000
+index 0000000..1366961
+--- /dev/null
++++ b/fs/f2fs/trace.h
+@@ -0,0 +1 @@
++/root/f2fs-stable/fs/f2fs/trace.h
 \ No newline at end of file
 diff --git a/fs/f2fs/xattr.c b/fs/f2fs/xattr.c
 deleted file mode 100644
