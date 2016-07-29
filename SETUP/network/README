@@ -1,0 +1,9 @@
+1. measure network bandwidth
+
+  iperf -s
+  iperf -c TARGET_IP
+
+2. check network devices
+
+  ethtool -s eth5 speed 10000 duplex full
+  ethtool eth5
