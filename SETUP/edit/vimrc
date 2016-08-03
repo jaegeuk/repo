@@ -11,5 +11,9 @@ set hls
 set number
 set nocp
 set laststatus=2
+set backspace=indent,eol,start
+:color desert
 
-source ~/.cscope_maps.vim
+"set csprg="/usr/local/bin/cscope"
+
+source ~/.vim/plugin/.cscope_maps.vim
