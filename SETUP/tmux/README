@@ -1,0 +1,7 @@
+For latest tmux
+
+sudo add-apt-repository -y ppa:pi-rho/dev
+sudo apt-get update
+sudo install -y tmux-next
+sudo apt-get remove tmux
+sudo ln -s /usr/bin/tmux-next /usr/bin/tmux
