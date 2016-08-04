@@ -41,8 +41,31 @@ _split_4()
 	tmux splitw -h -p 50 $Y2
 }
 
-_base_view()
+_cmd_view()
 {
+	tmux list-window | grep "1: cmd"
+	if [ $? -eq 0 ]; then
+		return
+	fi
+
+	tmux new-window -n cmd
+	tmux selectp -t 0
+	tmux splitw -v -p 50 $Y3
+	tmux splitw -h -p 50 $Y4
+	tmux selectp -t 0
+	tmux splitw -h -p 50 $Y2
+	tmux setw synchronize-panes on
+	tmux move-window -t 1
+}
+
+_mon_view()
+{
+	tmux list-window | grep "2: mon"
+	if [ $? -eq 0 ]; then
+		return
+	fi
+
+	tmux new-window -n mon
 	tmux selectp -t 0
 	tmux splitw -v -p 50 $Y1
 
@@ -56,8 +79,7 @@ _base_view()
 
 	_split_4 8
 
-#	tmux setw synchronize-panes on
-	tmux move-window -t 0
+	tmux move-window -t 2
 }
 
 tmux has-session -t mon
@@ -65,5 +87,6 @@ if [ $? -ne 0 ]; then
 	tmux new-session -d -s mon -n base $Y1
 fi
 
-_base_view
+_cmd_view
+_mon_view
 tmux attach-session -d -t mon
