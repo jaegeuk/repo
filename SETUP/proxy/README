@@ -1,0 +1,14 @@
+1. ~/.gitconfig
+  # use gitconfig
+
+2. /usr/bin/gitproxy
+  # make gitproxy
+  # chmod +x gitproxy
+
+3. /etc/environment
+  # use environment
+
+4. ~/.curlrc
+  # curlrc
+
+

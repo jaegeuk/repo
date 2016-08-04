@@ -1,0 +1,6 @@
+http_proxy="http://id:pass@proxy.com:8080/"
+https_proxy="http://id:pass@proxy.com:8080/"
+ftp_proxy="http://id:pass@proxy.com:8080/"
+HTTP_PROXY="http://id:pass@proxy.com:8080/"
+HTTPS_PROXY="http://id:pass@proxy.com:8080/"
+FTP_PROXY="http://id:pass@proxy.com:8080/"

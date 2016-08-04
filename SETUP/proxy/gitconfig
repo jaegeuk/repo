@@ -1,0 +1,20 @@
+[http]
+	proxy = http://id:pass@proxy.com:8080/
+	sslverify = false
+	postBuffer = 4M
+[https]
+	proxy = http://id:pass@proxy.com:8080/
+[user]
+	email = jaegeuk.kim@kernel.org
+	name = Jaegeuk Kim
+[core]
+	editor = vim
+	ignorecase = true
+	gitproxy = gitproxy
+[merge]
+	tool = vimdiff
+[color]
+	status = auto
+	branch = auto
+	interative = auto
+	diff = auto
