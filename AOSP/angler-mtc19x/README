@@ -1,0 +1,60 @@
+commit cc39430a5db53fe91f7b6a94b707a7fda11504c1
+Author: Jaegeuk Kim <jaegeuk@kernel.org>
+Date:   Thu Jan 7 19:17:30 2016 -0800
+
+    f2fs: Cynogenmod/AOSP support
+    
+    Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+
+commit 92113349fc2c6110254641c409d82cfc4df2ce5e
+Author: Jaegeuk Kim <jaegeuk@kernel.org>
+Date:   Fri Jul 22 16:15:24 2016 -0700
+
+    f2fs: adjust other changes
+    
+    This patch changes:
+    - d_inode
+    - file_dentry
+    - inode_nohighmem
+    - ...
+    
+    Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+
+commit 375fab7ac39a2061bfe30359b2106f23cc9282d1
+Author: Yunlei He <heyunlei@huawei.com>
+Date:   Fri Jul 22 19:08:31 2016 +0800
+
+    f2fs: get victim segment again after new cp
+    
+    Previous selected segment may become free after write_checkpoint,
+    if we do garbage collect on this segment, and then new_curseg happen
+    to reuse it, it may cause f2fs_bug_on as below.
+    
+    	panic+0x154/0x29c
+    	do_garbage_collect+0x15c/0xaf4
+    	f2fs_gc+0x2dc/0x444
+    	f2fs_balance_fs.part.22+0xcc/0x14c
+    	f2fs_balance_fs+0x28/0x34
+    	f2fs_map_blocks+0x5ec/0x790
+    	f2fs_preallocate_blocks+0xe0/0x100
+    	f2fs_file_write_iter+0x64/0x11c
+    	new_sync_write+0xac/0x11c
+    	vfs_write+0x144/0x1e4
+    	SyS_write+0x60/0xc0
+    
+    Here, maybe we check sit and ssa type during reset_curseg. So, we check
+    segment is stale or not, and select a new victim to avoid this.
+    
+    Signed-off-by: Yunlei He <heyunlei@huawei.com>
+    Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+
+commit 82b0d98cb5dda506a1c667dc636c3bc7a584da2d
+Author: Jaegeuk Kim <jaegeuk@kernel.org>
+Date:   Tue Jul 19 19:30:06 2016 -0700
+
+    f2fs: handle error case with f2fs_bug_on
+    
+    It's enough to show BUG or WARN by f2fs_bug_on for error case.
+    Then, we don't need to remain corrupted filesystem.
+    
+    Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>

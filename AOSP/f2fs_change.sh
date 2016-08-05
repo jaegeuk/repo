@@ -17,6 +17,7 @@ _download()
 	mv $VER/libsqlite.so $VER/system_lib_libsqlite.so
 	rsync -r --delete-excluded --delete gateway:/root/aosp/$OUT/system/lib64/libsqlite.so $VER/
 	mv $VER/libsqlite.so $VER/system_lib64_libsqlite.so
+	ssh gateway "cd /root/f2fs-stable && git log -n 4" > $VER/README
 }
 
 _flash_img()
