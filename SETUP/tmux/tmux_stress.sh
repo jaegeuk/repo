@@ -3,6 +3,7 @@
 WATCH="sudo watch -n .2 cat /sys/kernel/debug/f2fs/status"
 KER="sudo tail -f /var/log/kern.log"
 SUDO="sudo su"
+DSTAT="clear && sudo dstat -cmd"
 
 _get_addr()
 {
@@ -54,6 +55,13 @@ _klog()
 {
 	tmux selectp -t $1
 	tmux send-keys "$KER"
+	tmux send-keys KPenter
+}
+
+_dstat()
+{
+	tmux selectp -t $1
+	tmux send-keys "$DSTAT"
 	tmux send-keys KPenter
 }
 
@@ -119,12 +127,16 @@ _server_view()
 	tmux new-window -n $1 $ADDR
 	tmux splitw -h -p 80 $ADDR
 	tmux splitw -v -p 80 $ADDR
+	tmux selectp -t 0
+	tmux splitw -v -p 20 $ADDR
 
 	_sudo 0 $1
 	_watch 0
 	_sudo 1 $1
-	_klog 1
+	_dstat 1
 	_sudo 2 $1
+	_klog 2
+	_sudo 3 $1
 	tmux move-window -t $2
 }
 
