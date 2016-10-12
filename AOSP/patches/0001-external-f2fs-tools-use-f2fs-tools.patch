@@ -1,4 +1,4 @@
-From 5c9d238103484070cd71e229a12d58f2e0826a7e Mon Sep 17 00:00:00 2001
+From 180f67cb5460452f48d68ff25a2373a43b1bef06 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Thu, 14 Jan 2016 10:01:51 -0800
 Subject: [PATCH] external/f2fs-tools: use f2fs-tools
@@ -7,7 +7,7 @@ Link /root/f2fs-tools
 
 Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
 ---
- Android.mk               |    5 +-
+ Android.mk               |    3 +-
  fsck                     |    1 +
  fsck/Makefile.am         |   10 -
  fsck/dump.c              |  466 ----------------
@@ -29,7 +29,7 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mkfs/f2fs_format_main.c  |  139 -----
  mkfs/f2fs_format_utils.c |   68 ---
  mkfs/f2fs_format_utils.h |   16 -
- 22 files changed, 8 insertions(+), 6509 deletions(-)
+ 22 files changed, 6 insertions(+), 6509 deletions(-)
  create mode 120000 fsck
  delete mode 100644 fsck/Makefile.am
  delete mode 100644 fsck/dump.c
@@ -53,7 +53,7 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  delete mode 100644 mkfs/f2fs_format_utils.h
 
 diff --git a/Android.mk b/Android.mk
-index 5d73c3b..4d2d99b 100644
+index 5d73c3b..1f6c50c 100644
 --- a/Android.mk
 +++ b/Android.mk
 @@ -4,7 +4,8 @@ LOCAL_PATH:= $(call my-dir)
@@ -61,27 +61,11 @@ index 5d73c3b..4d2d99b 100644
  
  # The versions depend on $(LOCAL_PATH)/VERSION
 -version_CFLAGS := -DF2FS_MAJOR_VERSION=1 -DF2FS_MINOR_VERSION=4 -DF2FS_TOOLS_VERSION=\"1.4.0\" -DF2FS_TOOLS_DATE=\"2014-10-18\"
-+version_CFLAGS := -DF2FS_MAJOR_VERSION=1 -DF2FS_MINOR_VERSION=4 -DF2FS_TOOLS_VERSION=\"1.6.1\" -DF2FS_TOOLS_DATE=\"2016-04-26\"
++version_CFLAGS := -DF2FS_MAJOR_VERSION=1 -DF2FS_MINOR_VERSION=7 -DF2FS_TOOLS_VERSION=\"1.7.0\" -DF2FS_TOOLS_DATE=\"2016-07-28\"
 +version_CFLAGS += -DWITH_ANDROID -DWITH_BLKDISCARD
  
  # external/e2fsprogs/lib is needed for uuid/uuid.h
  common_C_INCLUDES := $(LOCAL_PATH)/include external/e2fsprogs/lib/
-@@ -97,6 +98,7 @@ LOCAL_MODULE := fsck.f2fs
- LOCAL_SRC_FILES := \
- 	fsck/dump.c \
- 	fsck/fsck.c \
-+	fsck/defrag.c \
- 	fsck/main.c \
- 	fsck/mount.c \
- 	lib/libf2fs.c \
-@@ -116,6 +118,7 @@ LOCAL_SRC_FILES := \
- 	fsck/dump.c \
- 	fsck/fsck.c \
- 	fsck/main.c \
-+	fsck/defrag.c \
- 	fsck/mount.c \
- 	lib/libf2fs.c \
- 	lib/libf2fs_io.c \
 diff --git a/fsck b/fsck
 new file mode 120000
 index 0000000..0c6f960

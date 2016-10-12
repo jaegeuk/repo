@@ -1,0 +1,223 @@
+From a16a1cb3bc493e96f13a47653739e0d5d51fe787 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Mon, 28 Mar 2016 16:05:57 -0700
+Subject: [PATCH] system/extras: f2fs-tools - catch up to 1.7.1
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ f2fs_utils/f2fs_dlutils.c     |  6 +++---
+ f2fs_utils/f2fs_ioutils.c     | 39 ++++++++++++++++++++++++++++++---------
+ f2fs_utils/f2fs_sparseblock.c | 12 ++++++------
+ f2fs_utils/f2fs_utils.c       | 12 ++++++------
+ 4 files changed, 45 insertions(+), 24 deletions(-)
+
+diff --git a/f2fs_utils/f2fs_dlutils.c b/f2fs_utils/f2fs_dlutils.c
+index 40be416..e05138d 100644
+--- a/f2fs_utils/f2fs_dlutils.c
++++ b/f2fs_utils/f2fs_dlutils.c
+@@ -38,15 +38,15 @@
+ #define F2FS_DYN_LIB "libf2fs_fmt_host_dyn.so"
+ 
+ int (*f2fs_format_device_dl)(void);
+-void (*f2fs_init_configuration_dl)(struct f2fs_configuration *);
++void (*f2fs_init_configuration_dl)(void);
+ 
+ int f2fs_format_device(void) {
+ 	assert(f2fs_format_device_dl);
+ 	return f2fs_format_device_dl();
+ }
+-void f2fs_init_configuration(struct f2fs_configuration *config) {
++void f2fs_init_configuration() {
+ 	assert(f2fs_init_configuration_dl);
+-	f2fs_init_configuration_dl(config);
++	f2fs_init_configuration_dl();
+ }
+ 
+ int dlopenf2fs() {
+diff --git a/f2fs_utils/f2fs_ioutils.c b/f2fs_utils/f2fs_ioutils.c
+index a050cf8..2d0b618 100644
+--- a/f2fs_utils/f2fs_ioutils.c
++++ b/f2fs_utils/f2fs_ioutils.c
+@@ -83,7 +83,7 @@ struct selabel_handle;
+ 
+ #endif
+ 
+-struct f2fs_configuration config;
++struct f2fs_configuration c;
+ struct sparse_file *f2fs_sparse_file;
+ 
+ struct buf_item {
+@@ -96,9 +96,9 @@ struct buf_item *buf_list;
+ 
+ static int dev_write_fd(void *buf, __u64 offset, size_t len)
+ {
+-	if (lseek64(config.fd, (off64_t)offset, SEEK_SET) < 0)
++	if (lseek64(c.fd, (off64_t)offset, SEEK_SET) < 0)
+ 		return -1;
+-	if (write(config.fd, buf, len) != len)
++	if (write(c.fd, buf, len) != len)
+ 		return -1;
+ 	return 0;
+ }
+@@ -135,11 +135,11 @@ static int dev_write_sparse(void *buf, __u64 byte_offset, size_t byte_len)
+ 	return 0;
+ }
+ 
+-void f2fs_finalize_device(struct f2fs_configuration *c)
++void f2fs_finalize_device(void)
+ {
+ }
+ 
+-int f2fs_trim_device()
++int f2fs_trim_device(int fd)
+ {
+ 	return 0;
+ }
+@@ -157,20 +157,36 @@ int dev_read(void  *buf, __u64 offset, size_t len)
+ 	return 0;
+ }
+ 
++int dev_readahead(__u64 offset, size_t len)
++{
++	return 0;
++}
++
+ int dev_write(void *buf, __u64 offset, size_t len)
+ {
+-	if (config.fd >= 0) {
++	if (c.fd >= 0) {
+ 		return dev_write_fd(buf, offset, len);
+ 	} else {
+ 		return dev_write_sparse(buf, offset, len);
+ 	}
+ }
+ 
++int dev_write_block(void *buf, __u64 blk_addr)
++{
++	assert(false); // Must not be invoked.
++	return 0;
++}
++
++int dev_write_dump(void *buf, __u64 offset, size_t len)
++{
++	assert(false); // Must not be invoked.
++	return 0;
++}
+ 
+ int dev_fill(void *buf, __u64 offset, size_t len)
+ {
+ 	int ret;
+-	if (config.fd >= 0) {
++	if (c.fd >= 0) {
+ 		return dev_write_fd(buf, offset, len);
+ 	}
+         // sparse file fills with zero by default.
+@@ -178,15 +194,20 @@ int dev_fill(void *buf, __u64 offset, size_t len)
+ 	return 0;
+ }
+ 
+-int dev_read_block(void *buf, __u64 blk_addr)
++int dev_fill_block(void *buf, __u64 blk_addr)
+ {
+ 	assert(false); // Must not be invoked.
+ 	return 0;
+ }
+ 
+-int dev_read_blocks(void *buf, __u64 addr, __u32 nr_blks)
++int dev_read_block(void *buf, __u64 blk_addr)
+ {
+ 	assert(false); // Must not be invoked.
+ 	return 0;
+ }
+ 
++int dev_reada_block(__u64 blk_addr)
++{
++	assert(false); // Must not be invoked.
++	return 0;
++}
+diff --git a/f2fs_utils/f2fs_sparseblock.c b/f2fs_utils/f2fs_sparseblock.c
+index e39a61f..3d63f91 100644
+--- a/f2fs_utils/f2fs_sparseblock.c
++++ b/f2fs_utils/f2fs_sparseblock.c
+@@ -26,9 +26,9 @@
+       #member, le64_to_cpu((ptr)->member), le64_to_cpu((ptr)->member) );  \
+   } while (0);
+ 
+-#define segno_in_journal(sum, i)    (sum->sit_j.entries[i].segno)
++#define segno_in_journal(sum, i)    (sum->journal.sit_j.entries[i].segno)
+ 
+-#define sit_in_journal(sum, i)      (sum->sit_j.entries[i].se)
++#define sit_in_journal(sum, i)      (sum->journal.sit_j.entries[i].se)
+ 
+ static void dbg_print_raw_sb_info(struct f2fs_super_block *sb)
+ {
+@@ -137,9 +137,9 @@ static void dbg_print_info_struct(struct f2fs_info *info)
+     SLOGD("blocks_per_sit: %"PRIu64, info->blocks_per_sit);
+     SLOGD("sit_blocks loc: %p", info->sit_blocks);
+     SLOGD("sit_sums loc: %p", info->sit_sums);
+-    SLOGD("sit_sums num: %d", le16_to_cpu(info->sit_sums->n_sits));
++    SLOGD("sit_sums num: %d", le16_to_cpu(info->sit_sums->journal.n_sits));
+     unsigned int i;
+-    for(i = 0; i < (le16_to_cpu(info->sit_sums->n_sits)); i++) {
++    for(i = 0; i < (le16_to_cpu(info->sit_sums->journal.n_sits)); i++) {
+         SLOGD("entry %d in journal entries is for segment %d",i, le32_to_cpu(segno_in_journal(info->sit_sums, i)));
+     }
+ 
+@@ -360,7 +360,7 @@ static int get_sit_summary(int fd, struct f2fs_info *info, struct f2fs_checkpoin
+     if (is_set_ckpt_flags(cp, CP_COMPACT_SUM_FLAG)) {
+         if (read_structure_blk(fd, info->cp_valid_cp_blkaddr + le32_to_cpu(cp->cp_pack_start_sum), buffer, 1))
+             return -1;
+-        memcpy(&info->sit_sums->n_sits, &buffer[SUM_JOURNAL_SIZE], SUM_JOURNAL_SIZE);
++        memcpy(&info->sit_sums->journal.n_sits, &buffer[SUM_JOURNAL_SIZE], SUM_JOURNAL_SIZE);
+     } else {
+         u64 blk_addr;
+         if (is_set_ckpt_flags(cp, CP_UMOUNT_FLAG))
+@@ -503,7 +503,7 @@ int run_on_used_blocks(u64 startblock, struct f2fs_info *info, int (*func)(u64 p
+ 
+             /* check the SIT entries in the journal */
+             found = 0;
+-            for(i = 0; i < le16_to_cpu(info->sit_sums->n_sits); i++) {
++            for(i = 0; i < le16_to_cpu(info->sit_sums->journal.n_sits); i++) {
+                 if (le32_to_cpu(segno_in_journal(info->sit_sums, i)) == segnum) {
+                     sit_entry = &sit_in_journal(info->sit_sums, i);
+                     found = 1;
+diff --git a/f2fs_utils/f2fs_utils.c b/f2fs_utils/f2fs_utils.c
+index 4c92622..f4f9667 100644
+--- a/f2fs_utils/f2fs_utils.c
++++ b/f2fs_utils/f2fs_utils.c
+@@ -42,15 +42,15 @@ struct selabel_handle;
+ 
+ extern void flush_sparse_buffs();
+ 
+-struct f2fs_configuration config;
++struct f2fs_configuration c;
+ struct sparse_file *f2fs_sparse_file;
+ extern int dlopenf2fs();
+ 
+ static void reset_f2fs_info() {
+ 	// Reset all the global data structures used by make_f2fs so it
+ 	// can be called again.
+-	memset(&config, 0, sizeof(config));
+-	config.fd = -1;
++	memset(&c, 0, sizeof(c));
++	c.fd = -1;
+ 	if (f2fs_sparse_file) {
+ 		sparse_file_destroy(f2fs_sparse_file);
+ 		f2fs_sparse_file = NULL;
+@@ -64,10 +64,10 @@ int make_f2fs_sparse_fd(int fd, long long len,
+ 		return -1;
+ 	}
+ 	reset_f2fs_info();
+-	f2fs_init_configuration(&config);
++	f2fs_init_configuration();
+ 	len &= ~((__u64)F2FS_BLKSIZE);
+-	config.total_sectors = len / config.sector_size;
+-	config.start_sector = 0;
++	c.total_sectors = len / c.sector_size;
++	c.start_sector = 0;
+ 	f2fs_sparse_file = sparse_file_new(F2FS_BLKSIZE, len);
+ 	f2fs_format_device();
+ 	sparse_file_write(f2fs_sparse_file, fd, /*gzip*/0, /*sparse*/1, /*crc*/0);
+-- 
+1.9.1
+
