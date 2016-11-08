@@ -1,4 +1,4 @@
-From ecf42182645ca941d589d2f6784e00719ac7a015 Mon Sep 17 00:00:00 2001
+From c3a7b15f04051eb50df8de56f150849468b62b26 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Wed, 13 Jan 2016 10:49:27 -0800
 Subject: [PATCH] f2fs: kernel support
@@ -34,7 +34,7 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  fs/f2fs/segment.c                   | 1800 +----------------------------------
  fs/f2fs/segment.h                   |  638 +------------
  fs/f2fs/shrinker.c                  |    1 +
- fs/f2fs/super.c                     |  792 +--------------
+ fs/f2fs/super.c                     |  791 +--------------
  fs/f2fs/trace.c                     |    1 +
  fs/f2fs/trace.h                     |    1 +
  fs/f2fs/xattr.c                     |  448 +--------
@@ -45,7 +45,7 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  include/linux/fscrypto.h            |    1 +
  include/trace/events/f2fs.h         |  683 +------------
  include/uapi/linux/fs.h             |   18 +
- 38 files changed, 72 insertions(+), 14107 deletions(-)
+ 38 files changed, 72 insertions(+), 14106 deletions(-)
  create mode 120000 fs/crypto
  mode change 100644 => 120000 fs/f2fs/Kconfig
  mode change 100644 => 120000 fs/f2fs/Makefile
@@ -80,10 +80,10 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mode change 100644 => 120000 include/trace/events/f2fs.h
 
 diff --git a/arch/arm64/configs/angler_defconfig b/arch/arm64/configs/angler_defconfig
-index ca14d1c..18f5464 100644
+index 7947974..03af1a2 100644
 --- a/arch/arm64/configs/angler_defconfig
 +++ b/arch/arm64/configs/angler_defconfig
-@@ -593,6 +593,13 @@ CONFIG_MSM_TZ_LOG=y
+@@ -596,6 +596,13 @@ CONFIG_MSM_TZ_LOG=y
  CONFIG_EXT4_FS=y
  CONFIG_EXT4_FS_SECURITY=y
  CONFIG_EXT4_FS_ENCRYPTION=y
@@ -98,7 +98,7 @@ index ca14d1c..18f5464 100644
  CONFIG_VFAT_FS=y
  CONFIG_TMPFS=y
 diff --git a/fs/Kconfig b/fs/Kconfig
-index dc3ec4c..a88962d 100644
+index 3b5e7c5..d9ba2b7 100644
 --- a/fs/Kconfig
 +++ b/fs/Kconfig
 @@ -61,6 +61,8 @@ config FILE_LOCKING
@@ -111,7 +111,7 @@ index dc3ec4c..a88962d 100644
  
  source "fs/quota/Kconfig"
 diff --git a/fs/Makefile b/fs/Makefile
-index adb8947..2b459a5 100644
+index 7594e22..7b8fb13 100644
 --- a/fs/Makefile
 +++ b/fs/Makefile
 @@ -29,6 +29,7 @@ obj-$(CONFIG_SIGNALFD)		+= signalfd.o
@@ -12064,10 +12064,10 @@ index 0000000..f871923
 \ No newline at end of file
 diff --git a/fs/f2fs/super.c b/fs/f2fs/super.c
 deleted file mode 100644
-index 8555f7d..0000000
+index 03ab8b8..0000000
 --- a/fs/f2fs/super.c
 +++ /dev/null
-@@ -1,791 +0,0 @@
+@@ -1,790 +0,0 @@
 -/*
 - * fs/f2fs/super.c
 - *
@@ -12309,7 +12309,6 @@ index 8555f7d..0000000
 -	if (test_opt(sbi, DISABLE_EXT_IDENTIFY))
 -		seq_puts(seq, ",disable_ext_identify");
 -
--	seq_printf(seq, ",active_logs=%u", sbi->active_logs);
 -
 -	return 0;
 -}
@@ -13504,10 +13503,10 @@ index 0000000..34c50a3
 +/root/f2fs-stable/fs/f2fs/xattr.h
 \ No newline at end of file
 diff --git a/include/linux/dcache.h b/include/linux/dcache.h
-index 9be5ac9..0f0b1aa 100644
+index df1f709..2bdf5c3 100644
 --- a/include/linux/dcache.h
 +++ b/include/linux/dcache.h
-@@ -210,6 +210,8 @@ struct dentry_operations {
+@@ -211,6 +211,8 @@ struct dentry_operations {
  
  #define DCACHE_DENTRY_KILLED	0x100000
  

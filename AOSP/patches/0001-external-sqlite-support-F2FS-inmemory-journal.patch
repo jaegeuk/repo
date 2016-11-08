@@ -1,4 +1,4 @@
-From 17a62f212a1c525544b7c3ed5183a574bfc12b0c Mon Sep 17 00:00:00 2001
+From e6865658a2f13f94ffde3de0e7fb84a9bdd9af9a Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Mon, 7 Dec 2015 13:33:06 -0800
 Subject: [PATCH] external/sqlite: support F2FS inmemory journal
@@ -10,23 +10,23 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  2 files changed, 82 insertions(+)
 
 diff --git a/dist/Android.mk b/dist/Android.mk
-index 20b3a0a..e4f0af3 100644
+index bf277d2..6818072 100644
 --- a/dist/Android.mk
 +++ b/dist/Android.mk
-@@ -30,6 +30,8 @@ common_sqlite_flags := \
+@@ -30,6 +30,8 @@ minimal_sqlite_flags := \
  	-DSQLITE_DEFAULT_FILE_PERMISSIONS=0600
  
- device_sqlite_flags := $(common_sqlite_flags) \
+ device_sqlite_flags := $(minimal_sqlite_flags) \
 +    -DSQLITE_DISABLE_DIRSYNC \
 +    -DSQLITE_USE_INMEM_JOURNAL \
      -DSQLITE_ENABLE_ICU \
      -DUSE_PREAD64 \
      -Dfdatasync=fdatasync \
 diff --git a/dist/sqlite3.c b/dist/sqlite3.c
-index 008512c..58383c0 100644
+index b0536a4..9ca3d66 100644
 --- a/dist/sqlite3.c
 +++ b/dist/sqlite3.c
-@@ -947,6 +947,7 @@ struct sqlite3_io_methods {
+@@ -955,6 +955,7 @@ struct sqlite3_io_methods {
    int (*xUnlock)(sqlite3_file*, int);
    int (*xCheckReservedLock)(sqlite3_file*, int *pResOut);
    int (*xFileControl)(sqlite3_file*, int op, void *pArg);
@@ -34,7 +34,7 @@ index 008512c..58383c0 100644
    int (*xSectorSize)(sqlite3_file*);
    int (*xDeviceCharacteristics)(sqlite3_file*);
    /* Methods above are valid for version 1 */
-@@ -10737,6 +10738,7 @@ SQLITE_PRIVATE int sqlite3OsUnlock(sqlite3_file*, int);
+@@ -11402,6 +11403,7 @@ SQLITE_PRIVATE int sqlite3OsUnlock(sqlite3_file*, int);
  SQLITE_PRIVATE int sqlite3OsCheckReservedLock(sqlite3_file *id, int *pResOut);
  SQLITE_PRIVATE int sqlite3OsFileControl(sqlite3_file*,int,void*);
  SQLITE_PRIVATE void sqlite3OsFileControlHint(sqlite3_file*,int,void*);
@@ -42,7 +42,7 @@ index 008512c..58383c0 100644
  #define SQLITE_FCNTL_DB_UNCHANGED 0xca093fa0
  SQLITE_PRIVATE int sqlite3OsSectorSize(sqlite3_file *id);
  SQLITE_PRIVATE int sqlite3OsDeviceCharacteristics(sqlite3_file *id);
-@@ -16593,6 +16595,10 @@ SQLITE_PRIVATE void sqlite3OsFileControlHint(sqlite3_file *id, int op, void *pAr
+@@ -17353,6 +17355,10 @@ SQLITE_PRIVATE void sqlite3OsFileControlHint(sqlite3_file *id, int op, void *pAr
    (void)id->pMethods->xFileControl(id, op, pArg);
  }
  
@@ -53,7 +53,7 @@ index 008512c..58383c0 100644
  SQLITE_PRIVATE int sqlite3OsSectorSize(sqlite3_file *id){
    int (*xSectorSize)(sqlite3_file*) = id->pMethods->xSectorSize;
    return (xSectorSize ? xSectorSize(id) : SQLITE_DEFAULT_SECTOR_SIZE);
-@@ -25330,6 +25336,7 @@ SQLITE_PRIVATE const char *sqlite3OpcodeName(int i){
+@@ -26508,6 +26514,7 @@ SQLITE_PRIVATE const char *sqlite3OpcodeName(int i){
  #include <sys/types.h>
  #include <sys/stat.h>
  #include <fcntl.h>
@@ -61,7 +61,7 @@ index 008512c..58383c0 100644
  #include <unistd.h>
  /* #include <time.h> */
  #include <sys/time.h>
-@@ -25792,6 +25799,15 @@ static int posixFchown(int fd, uid_t uid, gid_t gid){
+@@ -26970,6 +26977,15 @@ static int posixFchown(int fd, uid_t uid, gid_t gid){
  static int openDirectory(const char*, int*);
  static int unixGetpagesize(void);
  
@@ -77,7 +77,7 @@ index 008512c..58383c0 100644
  /*
  ** Many system calls are accessed through pointer-to-functions so that
  ** they may be overridden at runtime to facilitate fault injection during
-@@ -25926,6 +25942,9 @@ static struct unix_syscall {
+@@ -27104,6 +27120,9 @@ static struct unix_syscall {
    { "getpagesize",  (sqlite3_syscall_ptr)unixGetpagesize, 0 },
  #define osGetpagesize ((int(*)(void))aSyscall[24].pCurrent)
  
@@ -87,7 +87,7 @@ index 008512c..58383c0 100644
  #endif
  
  }; /* End of the overrideable system calls */
-@@ -28955,6 +28974,11 @@ static int full_fsync(int fd, int fullSync, int dataOnly){
+@@ -30132,6 +30151,11 @@ static int full_fsync(int fd, int fullSync, int dataOnly){
    ** so currently we default to the macro that redefines fdatasync to fsync
    */
    rc = fsync(fd);
@@ -99,7 +99,7 @@ index 008512c..58383c0 100644
  #else 
    rc = fdatasync(fd);
  #if OS_VXWORKS
-@@ -29341,6 +29365,14 @@ static int unixFileControl(sqlite3_file *id, int op, void *pArg){
+@@ -30518,6 +30542,14 @@ static int unixFileControl(sqlite3_file *id, int op, void *pArg){
    return SQLITE_NOTFOUND;
  }
  
@@ -114,7 +114,7 @@ index 008512c..58383c0 100644
  /*
  ** Return the sector size in bytes of the underlying block device for
  ** the specified file. This is almost always 512 bytes, but may be
-@@ -30460,6 +30492,7 @@ static const sqlite3_io_methods METHOD = {                                   \
+@@ -31638,6 +31670,7 @@ static const sqlite3_io_methods METHOD = {                                   \
     UNLOCK,                     /* xUnlock */                                 \
     CKLOCK,                     /* xCheckReservedLock */                      \
     unixFileControl,            /* xFileControl */                            \
@@ -122,7 +122,7 @@ index 008512c..58383c0 100644
     unixSectorSize,             /* xSectorSize */                             \
     unixDeviceCharacteristics,  /* xDeviceCapabilities */                     \
     SHMMAP,                     /* xShmMap */                                 \
-@@ -31375,6 +31408,12 @@ static int unixOpen(
+@@ -32553,6 +32586,12 @@ static int unixOpen(
    
    rc = fillInUnixFile(pVfs, fd, pFile, zPath, ctrlFlags);
  
@@ -135,7 +135,7 @@ index 008512c..58383c0 100644
  open_finished:
    if( rc!=SQLITE_OK ){
      sqlite3_free(p->pUnused);
-@@ -37477,6 +37516,7 @@ static const sqlite3_io_methods winIoMethod = {
+@@ -38663,6 +38702,7 @@ static const sqlite3_io_methods winIoMethod = {
    winUnlock,                      /* xUnlock */
    winCheckReservedLock,           /* xCheckReservedLock */
    winFileControl,                 /* xFileControl */
@@ -143,7 +143,7 @@ index 008512c..58383c0 100644
    winSectorSize,                  /* xSectorSize */
    winDeviceCharacteristics,       /* xDeviceCharacteristics */
    winShmMap,                      /* xShmMap */
-@@ -42981,8 +43021,16 @@ static int zeroJournalHdr(Pager *pPager, int doTruncate){
+@@ -44361,8 +44401,16 @@ static int zeroJournalHdr(Pager *pPager, int doTruncate){
      if( doTruncate || iLimit==0 ){
        rc = sqlite3OsTruncate(pPager->jfd, 0);
      }else{
@@ -160,7 +160,7 @@ index 008512c..58383c0 100644
      }
      if( rc==SQLITE_OK && !pPager->noSync ){
        rc = sqlite3OsSync(pPager->jfd, SQLITE_SYNC_DATAONLY|pPager->syncFlags);
-@@ -47860,6 +47908,17 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
+@@ -49248,6 +49296,17 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
        rc = writeMasterJournal(pPager, zMaster);
        if( rc!=SQLITE_OK ) goto commit_phase_one_exit;
    
@@ -178,7 +178,7 @@ index 008512c..58383c0 100644
        /* Sync the journal file and write all dirty pages to the database.
        ** If the atomic-update optimization is being used, this sync will not 
        ** create the journal file or perform any real IO.
-@@ -47874,6 +47933,17 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
+@@ -49262,6 +49321,17 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
        rc = syncJournal(pPager, 0);
        if( rc!=SQLITE_OK ) goto commit_phase_one_exit;
    
@@ -196,7 +196,7 @@ index 008512c..58383c0 100644
        rc = pager_write_pagelist(pPager,sqlite3PcacheDirtyList(pPager->pPCache));
        if( rc!=SQLITE_OK ){
          assert( rc!=SQLITE_IOERR_BLOCKED );
-@@ -47903,6 +47973,14 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
+@@ -49291,6 +49361,14 @@ SQLITE_PRIVATE int sqlite3PagerCommitPhaseOne(
    }
  
  commit_phase_one_exit:
@@ -211,7 +211,7 @@ index 008512c..58383c0 100644
    if( rc==SQLITE_OK && !pagerUseWal(pPager) ){
      pPager->eState = PAGER_WRITER_FINISHED;
    }
-@@ -80832,6 +80910,7 @@ static struct sqlite3_io_methods JournalFileMethods = {
+@@ -83013,6 +83091,7 @@ static struct sqlite3_io_methods JournalFileMethods = {
    0,             /* xUnlock */
    0,             /* xCheckReservedLock */
    0,             /* xFileControl */
@@ -219,7 +219,7 @@ index 008512c..58383c0 100644
    0,             /* xSectorSize */
    0,             /* xDeviceCharacteristics */
    0,             /* xShmMap */
-@@ -81120,6 +81199,7 @@ static const struct sqlite3_io_methods MemJournalMethods = {
+@@ -83302,6 +83381,7 @@ static const struct sqlite3_io_methods MemJournalMethods = {
    0,                /* xUnlock */
    0,                /* xCheckReservedLock */
    0,                /* xFileControl */

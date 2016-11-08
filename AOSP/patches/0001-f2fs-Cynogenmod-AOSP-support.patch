@@ -1,4 +1,4 @@
-From 74cae41f4fe688343a180c3e7e9d6bfecc7ca534 Mon Sep 17 00:00:00 2001
+From 9a6f8f6d4a8d9d7b5b012021715730020bac37e3 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Thu, 7 Jan 2016 19:17:30 -0800
 Subject: [PATCH] f2fs: Cynogenmod/AOSP support
@@ -6,14 +6,14 @@ Subject: [PATCH] f2fs: Cynogenmod/AOSP support
 Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
 ---
  fs/f2fs/data.c | 6 ++++--
- fs/f2fs/f2fs.h | 2 +-
- 2 files changed, 5 insertions(+), 3 deletions(-)
+ fs/f2fs/f2fs.h | 7 +------
+ 2 files changed, 5 insertions(+), 8 deletions(-)
 
 diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
-index 36bd250..919d607 100644
+index 4979071..f4757d9 100644
 --- a/fs/f2fs/data.c
 +++ b/fs/f2fs/data.c
-@@ -1775,12 +1775,14 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
+@@ -1791,12 +1791,14 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
  	return err;
  }
  
@@ -31,10 +31,22 @@ index 36bd250..919d607 100644
  
  	if (PageDirty(page)) {
 diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
-index 2494c74..354dbed 100644
+index d6ac7fa..ff8b72d 100644
 --- a/fs/f2fs/f2fs.h
 +++ b/fs/f2fs/f2fs.h
-@@ -2121,7 +2121,7 @@ int do_write_data_page(struct f2fs_io_info *);
+@@ -144,11 +144,6 @@ static inline bool wq_has_sleeper(wait_queue_head_t *wq)
+ 	return waitqueue_active(wq);
+ }
+ 
+-static inline struct inode *d_inode(const struct dentry *dentry)
+-{
+-	return dentry->d_inode;
+-}
+-
+ static inline struct dentry *file_dentry(const struct file *file)
+ {
+ 	return file->f_path.dentry;
+@@ -2200,7 +2195,7 @@ int do_write_data_page(struct f2fs_io_info *);
  int f2fs_map_blocks(struct inode *, struct f2fs_map_blocks *, int, int);
  int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *, u64, u64);
  void f2fs_set_page_dirty_nobuffers(struct page *);
