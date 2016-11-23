@@ -1,4 +1,4 @@
-From e6865658a2f13f94ffde3de0e7fb84a9bdd9af9a Mon Sep 17 00:00:00 2001
+From 2fa38708447ecec3e9d37b7ac39103fb092304de Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Mon, 7 Dec 2015 13:33:06 -0800
 Subject: [PATCH] external/sqlite: support F2FS inmemory journal

@@ -1,4 +1,4 @@
-From c3a7b15f04051eb50df8de56f150849468b62b26 Mon Sep 17 00:00:00 2001
+From cc63e823cb0191b165c6b20dc69e486a111d5adc Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Wed, 13 Jan 2016 10:49:27 -0800
 Subject: [PATCH] f2fs: kernel support
@@ -39,13 +39,15 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  fs/f2fs/trace.h                     |    1 +
  fs/f2fs/xattr.c                     |  448 +--------
  fs/f2fs/xattr.h                     |  146 +--
+ fs/posix_acl.c                      |   31 +
  include/linux/dcache.h              |    2 +
  include/linux/f2fs_fs.h             |  415 +-------
  include/linux/fs.h                  |   10 +
  include/linux/fscrypto.h            |    1 +
+ include/linux/posix_acl.h           |    1 +
  include/trace/events/f2fs.h         |  683 +------------
  include/uapi/linux/fs.h             |   18 +
- 38 files changed, 72 insertions(+), 14106 deletions(-)
+ 40 files changed, 104 insertions(+), 14106 deletions(-)
  create mode 120000 fs/crypto
  mode change 100644 => 120000 fs/f2fs/Kconfig
  mode change 100644 => 120000 fs/f2fs/Makefile
@@ -13502,6 +13504,48 @@ index 0000000..34c50a3
 @@ -0,0 +1 @@
 +/root/f2fs-stable/fs/f2fs/xattr.h
 \ No newline at end of file
+diff --git a/fs/posix_acl.c b/fs/posix_acl.c
+index 3542f1f..7a82cf1 100644
+--- a/fs/posix_acl.c
++++ b/fs/posix_acl.c
+@@ -407,6 +407,37 @@ posix_acl_create(struct posix_acl **acl, gfp_t gfp, umode_t *mode_p)
+ }
+ EXPORT_SYMBOL(posix_acl_create);
+ 
++/**
++ * posix_acl_update_mode  -  update mode in set_acl
++ *
++ * Update the file mode when setting an ACL: compute the new file permission
++ * bits based on the ACL.  In addition, if the ACL is equivalent to the new
++ * file mode, set *acl to NULL to indicate that no ACL should be set.
++ *
++ * As with chmod, clear the setgit bit if the caller is not in the owning group
++ * or capable of CAP_FSETID (see inode_change_ok).
++ *
++ * Called from set_acl inode operations.
++ */
++int posix_acl_update_mode(struct inode *inode, umode_t *mode_p,
++			  struct posix_acl **acl)
++{
++	umode_t mode = inode->i_mode;
++	int error;
++
++	error = posix_acl_equiv_mode(*acl, &mode);
++	if (error < 0)
++		return error;
++	if (error == 0)
++		*acl = NULL;
++	if (!in_group_p(inode->i_gid) &&
++	    !capable_wrt_inode_uidgid(inode, CAP_FSETID))
++		mode &= ~S_ISGID;
++	*mode_p = mode;
++	return 0;
++}
++EXPORT_SYMBOL(posix_acl_update_mode);
++
+ int
+ posix_acl_chmod(struct posix_acl **acl, gfp_t gfp, umode_t mode)
+ {
 diff --git a/include/linux/dcache.h b/include/linux/dcache.h
 index df1f709..2bdf5c3 100644
 --- a/include/linux/dcache.h
@@ -13986,6 +14030,18 @@ index 0000000..ed0d985
 @@ -0,0 +1 @@
 +/root/f2fs-stable/include/linux/fscrypto.h
 \ No newline at end of file
+diff --git a/include/linux/posix_acl.h b/include/linux/posix_acl.h
+index 7931efe..43cb8d5 100644
+--- a/include/linux/posix_acl.h
++++ b/include/linux/posix_acl.h
+@@ -89,6 +89,7 @@ extern int posix_acl_permission(struct inode *, const struct posix_acl *, int);
+ extern struct posix_acl *posix_acl_from_mode(umode_t, gfp_t);
+ extern int posix_acl_equiv_mode(const struct posix_acl *, umode_t *);
+ extern int posix_acl_create(struct posix_acl **, gfp_t, umode_t *);
++extern int posix_acl_update_mode(struct inode *, umode_t *, struct posix_acl **);
+ extern int posix_acl_chmod(struct posix_acl **, gfp_t, umode_t);
+ 
+ extern struct posix_acl *get_posix_acl(struct inode *, int);
 diff --git a/include/trace/events/f2fs.h b/include/trace/events/f2fs.h
 deleted file mode 100644
 index 52ae548..0000000

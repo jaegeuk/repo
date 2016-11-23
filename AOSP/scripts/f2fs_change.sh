@@ -19,7 +19,7 @@ _flash_img()
 	fastboot flash boot $OUT/boot.img
 	fastboot flash recovery $OUT/recovery.img
 	#fastboot flash recovery twrp-3.0.2-2-angler.img
-	fastboot flash system $OUT/system.img
+#	fastboot flash system $OUT/system.img
 #	fastboot flash cache $OUT/cache.img
 #	fastboot flash userdata $OUT/userdata.img
 }
@@ -54,5 +54,5 @@ _patch()
 
 #_patch
 #_download
-#_flash_img
-_flash
+_flash_img
+#_flash

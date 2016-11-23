@@ -7,7 +7,7 @@ export PATH=$(pwd)/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
 
 cd kernel
 make angler_defconfig
-make -j 16
+make -j 32
 
 echo "Linux version 3.10.73-g0c9f594 (android-build@wpiv12.hot.corp.google.com)
     (gcc version 4.9.x-google 20140827 (prerelease) (GCC) ) #1 SMP PREEMPT"
