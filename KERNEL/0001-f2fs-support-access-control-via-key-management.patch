@@ -1,0 +1,233 @@
+From 862c221f9143b298e30992a80c2e0f6383ed82c9 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Tue, 8 Mar 2016 16:48:50 -0800
+Subject: [PATCH] f2fs: support access control via key management
+
+Through this patch, user can assign its key into a specific normal files.
+Then, other users who do not have that key cannot open the files.
+Later, owner can drop its key from the files for other users to access
+the files again.
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ fs/f2fs/Kconfig |  1 +
+ fs/f2fs/f2fs.h  | 20 +++++++++++++++
+ fs/f2fs/file.c  | 78 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ fs/f2fs/xattr.c |  7 ++++++
+ fs/f2fs/xattr.h |  1 +
+ 5 files changed, 107 insertions(+)
+
+diff --git a/fs/f2fs/Kconfig b/fs/f2fs/Kconfig
+index 378c221..1852d99 100644
+--- a/fs/f2fs/Kconfig
++++ b/fs/f2fs/Kconfig
+@@ -2,6 +2,7 @@ config F2FS_FS
+ 	tristate "F2FS filesystem support"
+ 	depends on BLOCK
+ 	select CRYPTO
++	select KEYS
+ 	select CRYPTO_CRC32
+ 	help
+ 	  F2FS is based on Log-structured File System (LFS), which supports
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index 593cd6d..a2dd060 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -248,6 +248,8 @@ static inline bool __has_cursum_space(struct f2fs_journal *journal,
+ #define F2FS_IOC_MOVE_RANGE		_IOWR(F2FS_IOCTL_MAGIC, 9,	\
+ 						struct f2fs_move_range)
+ 
++#define F2FS_IOC_KEYCTL		_IOW(F2FS_IOCTL_MAGIC, 10, struct f2fs_key)
++
+ #define F2FS_IOC_SET_ENCRYPTION_POLICY	FS_IOC_SET_ENCRYPTION_POLICY
+ #define F2FS_IOC_GET_ENCRYPTION_POLICY	FS_IOC_GET_ENCRYPTION_POLICY
+ #define F2FS_IOC_GET_ENCRYPTION_PWSALT	FS_IOC_GET_ENCRYPTION_PWSALT
+@@ -271,6 +273,20 @@ static inline bool __has_cursum_space(struct f2fs_journal *journal,
+ #define F2FS_IOC32_GETVERSION		FS_IOC32_GETVERSION
+ #endif
+ 
++#define F2FS_KEY_SIZE	8
++#define F2FS_KEY_DESC_PREFIX		"f2fs:"
++#define F2FS_KEY_DESC_PREFIX_SIZE	5
++
++enum f2fs_key_mode {
++	F2FS_SET_KEY,
++	F2FS_DROP_KEY,
++};
++
++struct f2fs_key {
++	u8 key[F2FS_KEY_SIZE];
++	u8 mode;
++};
++
+ struct f2fs_defragment {
+ 	u64 start;
+ 	u64 len;
+@@ -401,6 +417,7 @@ struct f2fs_map_blocks {
+ #define FADVISE_LOST_PINO_BIT	0x02
+ #define FADVISE_ENCRYPT_BIT	0x04
+ #define FADVISE_ENC_NAME_BIT	0x08
++#define FADVISE_KEY_BIT		0x10
+ 
+ #define file_is_cold(inode)	is_file(inode, FADVISE_COLD_BIT)
+ #define file_wrong_pino(inode)	is_file(inode, FADVISE_LOST_PINO_BIT)
+@@ -413,6 +430,9 @@ struct f2fs_map_blocks {
+ #define file_clear_encrypt(inode) clear_file(inode, FADVISE_ENCRYPT_BIT)
+ #define file_enc_name(inode)	is_file(inode, FADVISE_ENC_NAME_BIT)
+ #define file_set_enc_name(inode) set_file(inode, FADVISE_ENC_NAME_BIT)
++#define file_has_key(inode)	is_file(inode, FADVISE_KEY_BIT)
++#define file_set_key(inode)	set_file(inode, FADVISE_KEY_BIT)
++#define file_clear_key(inode)	clear_file(inode, FADVISE_KEY_BIT)
+ 
+ #define DEF_DIR_LEVEL		0
+ 
+diff --git a/fs/f2fs/file.c b/fs/f2fs/file.c
+index 3d37333..a2e930f 100644
+--- a/fs/f2fs/file.c
++++ b/fs/f2fs/file.c
+@@ -22,6 +22,8 @@
+ #include <linux/pagevec.h>
+ #include <linux/uuid.h>
+ #include <linux/file.h>
++#include <linux/random.h>
++#include <keys/user-type.h>
+ 
+ #include "f2fs.h"
+ #include "node.h"
+@@ -440,6 +442,40 @@ static int f2fs_file_mmap(struct file *file, struct vm_area_struct *vma)
+ 	return 0;
+ }
+ 
++static int validate_access_key(struct inode *inode)
++{
++	u8 full_key_descriptor[F2FS_KEY_DESC_PREFIX_SIZE +
++					(F2FS_KEY_SIZE * 2) + 1];
++	struct key *keyring_key = NULL;
++	u8 key[F2FS_KEY_SIZE];
++	int ret;
++
++	ret = f2fs_getxattr(inode, F2FS_XATTR_INDEX_KEY,
++				F2FS_XATTR_NAME_ENCRYPTION_CONTEXT,
++				key, F2FS_KEY_SIZE, NULL);
++	if (ret != F2FS_KEY_SIZE)
++		return -EINVAL;
++
++	memcpy(full_key_descriptor, F2FS_KEY_DESC_PREFIX,
++					F2FS_KEY_DESC_PREFIX_SIZE);
++	sprintf(full_key_descriptor + F2FS_KEY_DESC_PREFIX_SIZE,
++					"%*phN", F2FS_KEY_SIZE, key);
++	full_key_descriptor[F2FS_KEY_DESC_PREFIX_SIZE +
++					(2 * F2FS_KEY_SIZE)] = '\0';
++	keyring_key = request_key(&key_type_logon, full_key_descriptor, NULL);
++	if (IS_ERR(keyring_key))
++		return PTR_ERR(keyring_key);
++
++	if (keyring_key->type != &key_type_logon) {
++		printk_once(KERN_WARNING
++				"%s: key type must be logon\n", __func__);
++		key_put(keyring_key);
++		return -ENOKEY;
++	}
++	key_put(keyring_key);
++	return 0;
++}
++
+ static int f2fs_file_open(struct inode *inode, struct file *filp)
+ {
+ 	int ret = generic_file_open(inode, filp);
+@@ -459,6 +495,9 @@ static int f2fs_file_open(struct inode *inode, struct file *filp)
+ 		return -EPERM;
+ 	}
+ 	dput(dir);
++
++	if (file_has_key(inode))
++		return validate_access_key(inode);
+ 	return ret;
+ }
+ 
+@@ -1755,6 +1794,43 @@ static bool uuid_is_nonzero(__u8 u[16])
+ 	return false;
+ }
+ 
++static int f2fs_ioc_keyctl(struct file *filp, unsigned long arg)
++{
++	struct inode *inode = file_inode(filp);
++	struct f2fs_key key;
++	void *value = key.key;
++	int type = XATTR_CREATE;
++	int ret;
++
++	if (copy_from_user(&key, (u8 __user *)arg, sizeof(key)))
++		return -EFAULT;
++
++	if (!S_ISREG(inode->i_mode))
++		return -EINVAL;
++
++	ret = mnt_want_write_file(filp);
++	if (ret)
++		return ret;
++
++	if (key.mode == F2FS_DROP_KEY) {
++		int ret = validate_access_key(inode);
++
++		if (ret)
++			goto out;
++
++		value = NULL;
++		type = XATTR_REPLACE;
++	}
++
++	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
++	ret = f2fs_setxattr(inode, F2FS_XATTR_INDEX_KEY,
++				F2FS_XATTR_NAME_ENCRYPTION_CONTEXT,
++				value, F2FS_KEY_SIZE, NULL, type);
++out:
++	mnt_drop_write_file(filp);
++	return ret;
++}
++
+ static int f2fs_ioc_set_encryption_policy(struct file *filp, unsigned long arg)
+ {
+ 	struct fscrypt_policy policy;
+@@ -2227,6 +2303,8 @@ long f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+ 		return f2fs_ioc_shutdown(filp, arg);
+ 	case FITRIM:
+ 		return f2fs_ioc_fitrim(filp, arg);
++	case F2FS_IOC_KEYCTL:
++		return f2fs_ioc_keyctl(filp, arg);
+ 	case F2FS_IOC_SET_ENCRYPTION_POLICY:
+ 		return f2fs_ioc_set_encryption_policy(filp, arg);
+ 	case F2FS_IOC_GET_ENCRYPTION_POLICY:
+diff --git a/fs/f2fs/xattr.c b/fs/f2fs/xattr.c
+index c47ce2f..778680a 100644
+--- a/fs/f2fs/xattr.c
++++ b/fs/f2fs/xattr.c
+@@ -554,6 +554,13 @@ static int __f2fs_setxattr(struct inode *inode, int index,
+ 	if (index == F2FS_XATTR_INDEX_ENCRYPTION &&
+ 			!strcmp(name, F2FS_XATTR_NAME_ENCRYPTION_CONTEXT))
+ 		f2fs_set_encrypted_inode(inode);
++	if (index == F2FS_XATTR_INDEX_KEY &&
++			!strcmp(name, F2FS_XATTR_NAME_ENCRYPTION_CONTEXT)) {
++		if (value)
++			file_set_key(inode);
++		else
++			file_clear_key(inode);
++	}
+ 	f2fs_mark_inode_dirty_sync(inode, true);
+ 	if (!error && S_ISDIR(inode->i_mode))
+ 		set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_CP);
+diff --git a/fs/f2fs/xattr.h b/fs/f2fs/xattr.h
+index f990de2..2f49084 100644
+--- a/fs/f2fs/xattr.h
++++ b/fs/f2fs/xattr.h
+@@ -37,6 +37,7 @@
+ #define F2FS_XATTR_INDEX_ADVISE			7
+ /* Should be same as EXT4_XATTR_INDEX_ENCRYPTION */
+ #define F2FS_XATTR_INDEX_ENCRYPTION		9
++#define F2FS_XATTR_INDEX_KEY			10
+ 
+ #define F2FS_XATTR_NAME_ENCRYPTION_CONTEXT	"c"
+ 
+-- 
+2.8.3
+
