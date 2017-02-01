@@ -22,6 +22,13 @@ https://source.android.com/source/building-kernels.html
  - 0001-f2fs-system-core-fs_mgr.patch   --> aosp/system/core
  - 0001-f2fs-kernel.patch               --> kernel
 
+***** Download vendor binaries ******
+cp extract-huawei-angler.sh ~/aosp
+cp extract-qcom-angler.sh ~/aosp
+cd ~/aosp
+./extract-huawei-angler.sh
+./extract-qcom-angler.sh
+
 4. build
  # ./make_kernel.sh
  # ./make_android.sh
