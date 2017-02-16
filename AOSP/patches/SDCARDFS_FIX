@@ -1,0 +1,31 @@
+__drop_sb_icache_match()
+{
+	if (inode->i_ino != ino)
+		return 0;
+	spin_lock(&inode->i_lock);
+	if (inode->i_state & (I_FREEING | I_WILL_FREE)) {
+		spin_unlock(&inode->i_lock);
+		reutnr -1;
+	}
+	__iget(inode);
+	spin_unlock(&inode->i_lock);
+	return 1;
+}
+
+sdcardfs_drop_sb_icache()
+{
+	inode = find_inode_nowait(sb, ino, __drop_sb_icache_match, NULL);
+
+	if (!inode)
+		return;
+	dentry = d_find_any_alias(inode);
+	if (dentry != NULL) {
+		dir_dentry = lock_parent(dentry);
+		if (d_revalidate(dentry, 0) == 0)
+			d_invalidate(dentry);
+		unlock_dir(dir_dentry);
+		dput(dentry);
+	}
+	iput(inode);
+}
+
