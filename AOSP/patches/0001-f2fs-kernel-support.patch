@@ -1,4 +1,4 @@
-From cc63e823cb0191b165c6b20dc69e486a111d5adc Mon Sep 17 00:00:00 2001
+From 533865eca5d2c5d992b4844254a4d5ef8713b080 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Wed, 13 Jan 2016 10:49:27 -0800
 Subject: [PATCH] f2fs: kernel support
@@ -43,11 +43,13 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  include/linux/dcache.h              |    2 +
  include/linux/f2fs_fs.h             |  415 +-------
  include/linux/fs.h                  |   10 +
- include/linux/fscrypto.h            |    1 +
+ include/linux/fscrypt_common.h      |    1 +
+ include/linux/fscrypt_notsupp.h     |    1 +
+ include/linux/fscrypt_supp.h        |    1 +
  include/linux/posix_acl.h           |    1 +
  include/trace/events/f2fs.h         |  683 +------------
- include/uapi/linux/fs.h             |   18 +
- 40 files changed, 104 insertions(+), 14106 deletions(-)
+ include/uapi/linux/fs.h             |   33 +
+ 42 files changed, 121 insertions(+), 14106 deletions(-)
  create mode 120000 fs/crypto
  mode change 100644 => 120000 fs/f2fs/Kconfig
  mode change 100644 => 120000 fs/f2fs/Makefile
@@ -78,14 +80,16 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  mode change 100644 => 120000 fs/f2fs/xattr.c
  mode change 100644 => 120000 fs/f2fs/xattr.h
  mode change 100644 => 120000 include/linux/f2fs_fs.h
- create mode 120000 include/linux/fscrypto.h
+ create mode 120000 include/linux/fscrypt_common.h
+ create mode 120000 include/linux/fscrypt_notsupp.h
+ create mode 120000 include/linux/fscrypt_supp.h
  mode change 100644 => 120000 include/trace/events/f2fs.h
 
 diff --git a/arch/arm64/configs/angler_defconfig b/arch/arm64/configs/angler_defconfig
-index 7947974..03af1a2 100644
+index 64371d1..0102dd0 100644
 --- a/arch/arm64/configs/angler_defconfig
 +++ b/arch/arm64/configs/angler_defconfig
-@@ -596,6 +596,13 @@ CONFIG_MSM_TZ_LOG=y
+@@ -594,6 +594,13 @@ CONFIG_MSM_TZ_LOG=y
  CONFIG_EXT4_FS=y
  CONFIG_EXT4_FS_SECURITY=y
  CONFIG_EXT4_FS_ENCRYPTION=y
@@ -14022,13 +14026,29 @@ index 1bbd269..15ef507 100644
  	struct hlist_bl_head	s_anon;		/* anonymous dentries for (nfs) exporting */
  #ifdef CONFIG_SMP
  	struct list_head __percpu *s_files;
-diff --git a/include/linux/fscrypto.h b/include/linux/fscrypto.h
+diff --git a/include/linux/fscrypt_common.h b/include/linux/fscrypt_common.h
 new file mode 120000
-index 0000000..ed0d985
+index 0000000..c12d4ff
 --- /dev/null
-+++ b/include/linux/fscrypto.h
++++ b/include/linux/fscrypt_common.h
 @@ -0,0 +1 @@
-+/root/f2fs-stable/include/linux/fscrypto.h
++/root/f2fs-stable/include/linux/fscrypt_common.h
+\ No newline at end of file
+diff --git a/include/linux/fscrypt_notsupp.h b/include/linux/fscrypt_notsupp.h
+new file mode 120000
+index 0000000..1f4ba65
+--- /dev/null
++++ b/include/linux/fscrypt_notsupp.h
+@@ -0,0 +1 @@
++/root/f2fs-stable/include/linux/fscrypt_notsupp.h
+\ No newline at end of file
+diff --git a/include/linux/fscrypt_supp.h b/include/linux/fscrypt_supp.h
+new file mode 120000
+index 0000000..dde4601
+--- /dev/null
++++ b/include/linux/fscrypt_supp.h
+@@ -0,0 +1 @@
++/root/f2fs-stable/include/linux/fscrypt_supp.h
 \ No newline at end of file
 diff --git a/include/linux/posix_acl.h b/include/linux/posix_acl.h
 index 7931efe..43cb8d5 100644
@@ -14739,10 +14759,10 @@ index 0000000..30b858f
 +/root/f2fs-stable/include/trace/events/f2fs.h
 \ No newline at end of file
 diff --git a/include/uapi/linux/fs.h b/include/uapi/linux/fs.h
-index a4ed56c..b16f0cb 100644
+index a4ed56c..b37b54d 100644
 --- a/include/uapi/linux/fs.h
 +++ b/include/uapi/linux/fs.h
-@@ -165,6 +165,24 @@ struct inodes_stat_t {
+@@ -165,6 +165,39 @@ struct inodes_stat_t {
  #define FS_IOC32_SETVERSION		_IOW('v', 2, int)
  
  /*
@@ -14750,6 +14770,21 @@ index a4ed56c..b16f0cb 100644
 + */
 +/* Policy provided via an ioctl on the topmost directory */
 +#define FS_KEY_DESCRIPTOR_SIZE	8
++
++#define FS_POLICY_FLAGS_PAD_4		0x00
++#define FS_POLICY_FLAGS_PAD_8		0x01
++#define FS_POLICY_FLAGS_PAD_16		0x02
++#define FS_POLICY_FLAGS_PAD_32		0x03
++#define FS_POLICY_FLAGS_PAD_MASK	0x03
++#define FS_POLICY_FLAGS_VALID		0x03
++
++/* Encryption algorithms */
++#define FS_ENCRYPTION_MODE_INVALID		0
++#define FS_ENCRYPTION_MODE_AES_256_XTS		1
++#define FS_ENCRYPTION_MODE_AES_256_GCM		2
++#define FS_ENCRYPTION_MODE_AES_256_CBC		3
++#define FS_ENCRYPTION_MODE_AES_256_CTS		4
++
 +
 +struct fscrypt_policy {
 +	__u8 version;
