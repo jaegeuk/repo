@@ -1,19 +1,41 @@
-From 7549f4ea63c1bb6381a1f27ff7e52c5e1b1de02b Mon Sep 17 00:00:00 2001
+From ea6cec3e229b4fd45b2381e41494354553530f07 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Thu, 7 Jan 2016 19:17:30 -0800
 Subject: [PATCH] f2fs: Cynogenmod/AOSP support
 
 Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
 ---
- fs/f2fs/data.c | 6 ++++--
- fs/f2fs/f2fs.h | 7 +------
- 2 files changed, 5 insertions(+), 8 deletions(-)
+ fs/crypto/fscrypt_private.h | 10 ----------
+ fs/f2fs/data.c              |  6 ++++--
+ fs/f2fs/f2fs.h              |  8 ++------
+ 3 files changed, 6 insertions(+), 18 deletions(-)
 
+diff --git a/fs/crypto/fscrypt_private.h b/fs/crypto/fscrypt_private.h
+index cc614d5..d26b6c0 100644
+--- a/fs/crypto/fscrypt_private.h
++++ b/fs/crypto/fscrypt_private.h
+@@ -114,16 +114,6 @@ static inline void bio_set_op_attrs(struct bio *bio, unsigned op,
+ 	bio->bi_rw = op | op_flags;
+ }
+ 
+-static inline struct inode *d_inode(const struct dentry *dentry)
+-{
+-	return dentry->d_inode;
+-}
+-
+-static inline bool d_is_negative(const struct dentry *dentry)
+-{
+-	return (dentry->d_inode == NULL);
+-}
+-
+ /* crypto.c */
+ extern int fscrypt_initialize(unsigned int cop_flags);
+ extern struct workqueue_struct *fscrypt_read_workqueue;
 diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
-index 398af68..6d8675b 100644
+index e1080dc..a1abc8a 100644
 --- a/fs/f2fs/data.c
 +++ b/fs/f2fs/data.c
-@@ -1841,12 +1841,14 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
+@@ -1948,12 +1948,14 @@ static ssize_t f2fs_direct_IO(int rw, struct kiocb *iocb,
  	return err;
  }
  
@@ -31,10 +53,10 @@ index 398af68..6d8675b 100644
  
  	if (PageDirty(page)) {
 diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
-index f554154..d2e11eb 100644
+index a5b5ae1..44e22fb 100644
 --- a/fs/f2fs/f2fs.h
 +++ b/fs/f2fs/f2fs.h
-@@ -144,11 +144,6 @@ static inline bool wq_has_sleeper(wait_queue_head_t *wq)
+@@ -178,11 +178,6 @@ static inline bool wq_has_sleeper(wait_queue_head_t *wq)
  	return waitqueue_active(wq);
  }
  
@@ -46,15 +68,16 @@ index f554154..d2e11eb 100644
  static inline struct dentry *file_dentry(const struct file *file)
  {
  	return file->f_path.dentry;
-@@ -2258,7 +2253,7 @@ int do_write_data_page(struct f2fs_io_info *);
- int f2fs_map_blocks(struct inode *, struct f2fs_map_blocks *, int, int);
- int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *, u64, u64);
- void f2fs_set_page_dirty_nobuffers(struct page *);
--void f2fs_invalidate_page(struct page *, unsigned long);
-+void f2fs_invalidate_page(struct page *, unsigned int, unsigned int);
- int f2fs_release_page(struct page *, gfp_t);
- 
- /*
+@@ -2410,7 +2405,8 @@ int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map,
+ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
+ 			u64 start, u64 len);
+ void f2fs_set_page_dirty_nobuffers(struct page *page);
+-void f2fs_invalidate_page(struct page *page, unsigned long int offset);
++void f2fs_invalidate_page(struct page *, unsigned int offset,
++					unsigned int length);
+ int f2fs_release_page(struct page *page, gfp_t wait);
+ #ifdef CONFIG_MIGRATION
+ int f2fs_migrate_page(struct address_space *mapping, struct page *newpage,
 -- 
 1.9.1
 
