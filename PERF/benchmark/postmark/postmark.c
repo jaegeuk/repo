@@ -137,6 +137,7 @@ float bytes_read;    /* number of bytes read from files */
 
 /* Configurable Parameters */
 int file_size_low=500;
+int file_size_low_limit=64*1024;
 int file_size_high=10000;       /* file size: fixed or random within range */
 int simultaneous=500;           /* simultaneous files */
 int seed=42;                    /* random number generator seed */
@@ -145,6 +146,8 @@ int subdirectories=0;		/* Number of subdirectories */
 int read_block_size=512;        /* I/O block sizes */
 int write_block_size=512;
 int bias_read=5;                /* chance of picking read over append */
+int bias_large=2;                /* chance of picking read over append */
+int fsync_rate=1;                /* chance of picking read over append */
 int bias_create=5;              /* chance of picking create over delete */
 int buffered_io=1;              /* use C library buffered I/O */
 int report=0;                   /* 0=verbose, 1=terse report format */
@@ -697,8 +700,15 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
       { /* decide on name and initial length */
       create_file_name(file_table[free_file].name);
 
-      file_table[free_file].size=
-         file_size_low+RND(file_size_high-file_size_low);
+//     file_table[free_file].size=
+//       file_size_low+RND(file_size_high-file_size_low);
+      if (RND(10) < bias_large) {
+         file_table[free_file].size=
+            file_size_low_limit+RND(file_size_high - file_size_low_limit);
+      } else {
+         file_table[free_file].size=
+            file_size_low+RND(file_size_low_limit - file_size_low);
+      }
 
       if (buffered)
          fp=fopen(file_table[free_file].name,"w");
@@ -709,12 +719,17 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          {
          if (buffered)
             {
+            int fd = fileno(fp);
             fwrite_blocks(fp,file_table[free_file].size);
+            if (RND(10) < fsync_rate)
+               fsync(fd);
             fclose(fp);
             }
          else
             {
             write_blocks(fd,file_table[free_file].size);
+            if (RND(10) < fsync_rate)
+               fsync(fd);
             close(fd);
             }
          }
