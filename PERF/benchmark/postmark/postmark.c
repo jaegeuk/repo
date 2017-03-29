@@ -51,6 +51,7 @@ Versions:
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <time.h>
 #include <fcntl.h>
 
@@ -93,6 +94,10 @@ extern int cli_set_read();
 extern int cli_set_write();
 extern int cli_set_buffering();
 extern int cli_set_bias_read();
+extern int cli_set_bias_large();
+extern int cli_set_fsync_rate();
+extern int cli_set_delete();
+extern int cli_set_update();
 extern int cli_set_bias_create();
 extern int cli_set_report();
 
@@ -112,7 +117,15 @@ cmd command_list[]={ /* table of CLI commands */
    {"set write",cli_set_write,"Sets write block size"},
    {"set buffering",cli_set_buffering,"Sets usage of buffered I/O"},
    {"set bias read",cli_set_bias_read,
-      "Sets the chance of choosing read over append"},
+      "Sets the chance of choosing read over update"},
+   {"set bias large",cli_set_bias_large,
+      "Sets the chance of choosing large file"},
+   {"set fsync rate",cli_set_fsync_rate,
+      "Sets the chance of fsyncshing file after create"},
+   {"set delete",cli_set_delete,
+      "Sets the # of deletion after finish"},
+   {"set update",cli_set_update,
+      "Sets the # of update blocks"},
    {"set bias create",cli_set_bias_create,
       "Sets the chance of choosing create over delete"},
    {"set report",cli_set_report,"Choose verbose or terse report format"},
@@ -148,6 +161,8 @@ int write_block_size=512;
 int bias_read=5;                /* chance of picking read over append */
 int bias_large=2;                /* chance of picking read over append */
 int fsync_rate=1;                /* chance of picking read over append */
+int number_delete=-1;                /* chance of picking read over append */
+int number_update=1;                /* chance of picking read over append */
 int bias_create=5;              /* chance of picking create over delete */
 int buffered_io=1;              /* use C library buffered I/O */
 int report=0;                   /* 0=verbose, 1=terse report format */
@@ -475,6 +490,50 @@ char *param; /* remainder of command line */
    return(1);
 }
 
+int cli_set_bias_large(param)
+char *param; /* remainder of command line */
+{
+   int value;
+
+   if (param && (value=atoi(param))>=-1  && value<=10)
+      bias_large=value;
+   else
+      fprintf(stderr,
+        "Error: no bias specified (0-10 for greater chance,-1 to disable)\n");
+
+   return(1);
+}
+
+int cli_set_fsync_rate(param)
+char *param; /* remainder of command line */
+{
+   int value;
+
+   if (param && (value=atoi(param))>=-1  && value<=10)
+      fsync_rate=value;
+   else
+      fprintf(stderr,
+        "Error: no bias specified (0-10 for greater chance,-1 to disable)\n");
+
+   return(1);
+}
+
+/* UI callback for 'set bias create' - sets probability of create vs. delete */
+int cli_set_delete(param)
+char *param; /* remainder of command line */
+{
+   number_delete=atoi(param);
+   return(1);
+}
+
+/* UI callback for 'set bias create' - sets probability of create vs. delete */
+int cli_set_update(param)
+char *param; /* remainder of command line */
+{
+   number_update=atoi(param);
+   return(1);
+}
+
 /* UI callback for 'set bias create' - sets probability of create vs. delete */
 int cli_set_bias_create(param)
 char *param; /* remainder of command line */
@@ -719,10 +778,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          {
          if (buffered)
             {
-            int fd = fileno(fp);
             fwrite_blocks(fp,file_table[free_file].size);
-            if (RND(10) < fsync_rate)
-               fsync(fd);
             fclose(fp);
             }
          else
@@ -800,7 +856,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
 }
 
 /* appends random data to a chosen file up to the maximum configured length */
-void append_file(number,buffered)
+void update_file(number,buffered)
 int number;   /* number of file (from file_table) to append date to */
 int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
 {
@@ -811,13 +867,13 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
    if (file_table[number].size<file_size_high)
       {
       if (buffered)
-         fp=fopen(file_table[number].name,"a");
+         fp=fopen(file_table[number].name,"w");
       else
-         fd=open(file_table[number].name,O_RDWR|O_APPEND,0644);
+         fd=open(file_table[number].name,O_RDWR,0644);
 
       if ((fp || fd!=-1) && file_table[number].size<file_size_high)
          {
-         block=RND(file_size_high-file_table[number].size)+1;
+         block=RND(file_table[number].size);
 
          if (buffered)
             {
@@ -826,11 +882,17 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             }
          else
             {
-            write_blocks(fd,block);
+            int i;
+            for (i = 0; i < number_update; i++) {
+               lseek(fd,RND(file_table[number].size), SEEK_SET);
+               write_blocks(fd,write_block_size);
+            }
+            if (RND(10) < fsync_rate)
+               fsync(fd);
             close(fd);
             }
 
-         file_table[number].size+=block;
+         //file_table[number].size+=block;
          files_appended++;
          }
       else
@@ -886,7 +948,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          if (RND(10)<bias_read) /* read file */
             read_file(find_used_file(),buffered);
          else /* append file */
-            append_file(find_used_file(),buffered);
+            update_file(find_used_file(),buffered);
          }
 
       if (bias_create!=-1) /* if create/delete not locked out... */
@@ -1029,6 +1091,7 @@ char *param; /* unused */
    fflush(stdout);
    for (i=0; i<simultaneous; i++)
       create_file(buffered_io);
+   sync();
    printf("Done\n");
   
    printf("Performing transactions");
@@ -1043,15 +1106,20 @@ char *param; /* unused */
    printf("Deleting files...");
    fflush(stdout);
    delete_base=files_deleted;
-   for (i=0; i<simultaneous<<1; i++)
-      delete_file(i);
+   if (number_delete == -1) {
+      for (i=0; i<simultaneous<<1; i++)
+         delete_file(i);
+   } else {
+      for (i=0; i<number_delete; i++)
+            delete_file(find_used_file());
+   }
    printf("Done\n");
 
    /* print end time and difference, transaction numbers */
    time(&end_time);
 
    /* delete previously created subdirectories */
-   if (subdirectories>1)
+   if (subdirectories>1 && number_delete == -1)
       {
       printf("Deleting subdirectories...");
       fflush(stdout);
@@ -1126,7 +1194,7 @@ char *param; /* optional: name of output file */
 
    fprintf(fp,"Block sizes are: read=%s, ",scale(read_block_size));
    fprintf(fp,"write=%s\n",scale(write_block_size));
-   fprintf(fp,"Biases are: read/append=%d, create/delete=%d\n",bias_read,
+   fprintf(fp,"Biases are: read/update=%d, create/delete=%d\n",bias_read,
       bias_create);
    fprintf(fp,"%ssing Unix buffered file I/O\n",buffered_io?"U":"Not u");
    fprintf(fp,"Random number generator seed is %d\n",seed);

@@ -1,5 +1,14 @@
-./iowatcher -d /dev/nvme0n1p1 -t f2fs.dump -p './postmark' < postmark_run
+#!/bin/bash
+
+../xfstests-f2fs/run.sh reload
+
+sleep 1
+
+./iowatcher -d /dev/nvme0n1 -t f2fs.dump -p './postmark' < postmark_run
 
 iowatcher -t f2fs -o trace.svg
+
+blkparse f2fs -d bp.bin >/dev/null
+btt -i bp.bin
 
 scp trace.svg jaegeuk@mac:~/

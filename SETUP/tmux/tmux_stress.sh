@@ -109,9 +109,15 @@ _xfstests_view()
 		return
 	fi
 
-	tmux new-window -n xfstests "$(_get_addr dir file 0)"
-	_servers_4 dir file
-	tmux setw synchronize-panes on
+	ADDR="ssh jaegeuk@xfstests"
+
+	tmux new-window -n xfstests $ADDR
+	tmux splitw -h $ADDR
+
+	tmux selectp 0
+
+#	tmux new-window -n xfstests "$(_get_addr dir file 0)"
+#	_servers_4 dir file
 	tmux move-window -t 2
 }
 
@@ -125,10 +131,10 @@ _server_view()
 	ADDR="ssh jaegeuk@$1"
 
 	tmux new-window -n $1 $ADDR
-	tmux splitw -h -p 80 $ADDR
-	tmux splitw -v -p 80 $ADDR
+	tmux splitw -h -p 73 $ADDR
+	tmux splitw -v -p 78 $ADDR
 	tmux selectp -t 0
-	tmux splitw -v -p 20 $ADDR
+	tmux splitw -v -p 10 $ADDR
 
 	_sudo 0 $1
 	_watch 0

@@ -1,10 +1,16 @@
-set size 1000 64000000
+set size 1000 128000000
 set seed 1000000
-set number 500000
-set transactions 1000000
+set number 9500
+set transactions 200000
+set buffering false
+set delete 0
+set update 8
 set location /mnt/test
-set subdirectories 10
-set bias_read 0
+set subdirectories 5
+set bias read 0
+set bias create 5
+set bias large 1
+set fsync rate 8
 set read 4096
 set write 4096
 run
