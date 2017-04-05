@@ -1,0 +1,20 @@
+#!/bin/bash
+
+../xfstests-f2fs/run.sh reload
+
+#./iowatcher -d /dev/nvme0n1 -t f2fs.dump -p 'touch /mnt/test/aa'
+#exit
+
+./iowatcher -d /dev/nvme1n1 -t f2fs.dump -p './postmark' < postmark_run
+
+cat /sys/kernel/debug/f2fs/status
+
+umount /mnt/test
+
+./iowatcher -t f2fs -o all.svg
+./iowatcher -t f2fs -o io.svg -x 0:300 -O io
+
+blkparse f2fs -d bp.bin >/dev/null
+btt -i bp.bin >/dev/null
+
+scp all.svg io.svg jaegeuk@mac:~/

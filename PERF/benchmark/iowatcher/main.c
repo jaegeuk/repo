@@ -729,8 +729,8 @@ static void plot_io_legend(struct plot *plot, struct graph_dot_data *gdd, char *
 	free(label);
 }
 
-static void plot_io(struct plot *plot, unsigned int min_seconds,
-		    unsigned int max_seconds, u64 min_offset, u64 max_offset)
+static void __plot_io(struct plot *plot, unsigned int min_seconds,
+	    unsigned int max_seconds, u64 min_offset, u64 max_offset, int t)
 {
 	struct trace_file *tf;
 	int i;
@@ -742,7 +742,11 @@ static void plot_io(struct plot *plot, unsigned int min_seconds,
 
 	svg_alloc_legend(plot, count_io_plot_types() * 2);
 
-	set_plot_label(plot, "Device IO");
+	if (t == 1)
+		set_plot_label(plot, "Write IO pattern");
+	else
+		set_plot_label(plot, "Read IO pattern");
+
 	set_ylabel(plot, "Offset (MB)");
 	set_yticks(plot, num_yticks, min_offset / (1024 * 1024),
 		   max_offset / (1024 * 1024), "");
@@ -752,11 +756,11 @@ static void plot_io(struct plot *plot, unsigned int min_seconds,
 		char *prefix = tf->label ? tf->label : "";
 
 		for (i = 0; i < tf->io_plots; i++) {
-			if (tf->gdd_writes[i]) {
+			if (t == 1 && tf->gdd_writes[i]) {
 				svg_io_graph(plot, tf->gdd_writes[i]);
 				plot_io_legend(plot, tf->gdd_writes[i], prefix, " Writes");
 			}
-			if (tf->gdd_reads[i]) {
+			if (t == 2 && tf->gdd_reads[i]) {
 				svg_io_graph(plot, tf->gdd_reads[i]);
 				plot_io_legend(plot, tf->gdd_reads[i], prefix, " Reads");
 			}
@@ -766,6 +770,13 @@ static void plot_io(struct plot *plot, unsigned int min_seconds,
 		set_xlabel(plot, "Time (seconds)");
 	svg_write_legend(plot);
 	close_plot(plot);
+}
+
+static void plot_io(struct plot *plot, unsigned int min_seconds,
+		    unsigned int max_seconds, u64 min_offset, u64 max_offset)
+{
+	__plot_io(plot, min_seconds, max_seconds, min_offset, max_offset, 1);
+	__plot_io(plot, min_seconds, max_seconds, min_offset, max_offset, 2);
 }
 
 static void plot_tput(struct plot *plot, unsigned int min_seconds,
