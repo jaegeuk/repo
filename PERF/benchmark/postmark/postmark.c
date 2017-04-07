@@ -882,13 +882,8 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             }
          else
             {
-            int i;
-            for (i = 0; i < number_update; i++) {
-               lseek(fd,RND(file_table[number].size), SEEK_SET);
-               write_blocks(fd,write_block_size);
-            }
-            if (RND(10) < fsync_rate)
-               fsync(fd);
+            lseek(fd,RND(file_table[number].size), SEEK_SET);
+            write_blocks(fd,write_block_size);
             close(fd);
             }
 
@@ -948,7 +943,13 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          if (RND(10)<bias_read) /* read file */
             read_file(find_used_file(),buffered);
          else /* append file */
-            update_file(find_used_file(),buffered);
+            {
+            int i;
+
+            for (i = 0; i < number_update; i++)
+               update_file(find_used_file(),buffered);
+            }
+            sync();
          }
 
       if (bias_create!=-1) /* if create/delete not locked out... */

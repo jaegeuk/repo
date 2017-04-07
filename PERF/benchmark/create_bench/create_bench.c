@@ -10,15 +10,10 @@
 
 static long long timediff_ms(struct timeval start, struct timeval end)
 {
-	long long diff_ms = (end.tv_sec - start.tv_sec) * 1000.0;
+	long long s1 = start.tv_sec * 1000.0 + start.tv_usec / 1000.0;
+	long long s2 = end.tv_sec * 1000.0 + end.tv_usec / 1000.0;
 
-	if (start.tv_usec <= end.tv_usec)
-		diff_ms += (end.tv_usec - start.tv_usec) / 1000.0;
-	else {
-		diff_ms -= 1000.0 +
-			(end.tv_usec + 1000.0 - start.tv_usec) / 1000.0;
-	}
-	return diff_ms;
+	return s2 - s1;
 }
 
 int create_files(char *path, int nblocks, int nfiles)

@@ -4,13 +4,13 @@ set number 9500
 set transactions 200000
 set buffering false
 set delete 0
-set update 8
+set update 32
 set location /mnt/test
 set subdirectories 5
 set bias read 0
 set bias create 5
 set bias large 1
-set fsync rate 8
+set fsync rate 10
 set read 4096
 set write 4096
 run
