@@ -14,6 +14,7 @@
 #define F2FS_IOC_RELEASE_VOLATILE_WRITE _IO(F2FS_IOCTL_MAGIC, 4)
 #define F2FS_IOC_ABORT_VOLATILE_WRITE   _IO(F2FS_IOCTL_MAGIC, 5)
 #define F2FS_IOC_GARBAGE_COLLECT        _IO(F2FS_IOCTL_MAGIC, 6)
+#define F2FS_IOC_FLUSH_DEVICE		_IO(F2FS_IOCTL_MAGIC, 10)
 
 #define BLOCK_SIZE	4096
 #define DB_BLOCKS	256
@@ -26,13 +27,23 @@ static long long timediff_ms(struct timeval start, struct timeval end)
 	return s2 - s1;
 }
 
-int create_files(char *path, int nblocks, int nfiles, int atomic)
+int create_files(char *path, int nblocks, int nfiles, int atomic, int flush)
 {
 	char buf[BLOCK_SIZE];
 	char name[BLOCK_SIZE];
 	struct timeval start, end;
 	unsigned long long diff_ms;
 	int i, j, fd;
+
+	if (flush) {
+		gettimeofday(&start, NULL);
+		sprintf(name, "%s/base", path);
+		fd = open(name, O_CREAT|O_RDWR);
+		ioctl(fd, F2FS_IOC_FLUSH_DEVICE);
+		close(fd);
+		gettimeofday(&end, NULL);
+		printf("Flush time (ms) = %llu\n", timediff_ms(start, end));
+	}
 
 	mkdir(path, 0777);
 
@@ -73,15 +84,15 @@ int create_files(char *path, int nblocks, int nfiles, int atomic)
 	}
 	gettimeofday(&end, NULL);
 
-	printf("%llu\n", timediff_ms(start, end));
+	printf("Elapsed time (ms) = %llu\n", timediff_ms(start, end));
 	return 0;
 }
 
 int main(int argc, char **argv)
 {
-	if (argc != 5) {
+	if (argc != 6) {
 		printf("Usage: ./a.out [dir_path] [nblocks/file] [nfiles] [atomic]\n");
 		return -1;
 	}
-	return create_files(argv[1], atoi(argv[2]), atoi(argv[3]), atoi(argv[4]));
+	return create_files(argv[1], atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
 }
