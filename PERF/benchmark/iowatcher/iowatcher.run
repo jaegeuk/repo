@@ -5,7 +5,7 @@
 #./iowatcher -d /dev/nvme0n1 -t f2fs.dump -p 'touch /mnt/test/aa'
 #exit
 
-./iowatcher -d /dev/nvme1n1 -t f2fs.dump -p './postmark' < postmark_run
+./iowatcher -d /dev/sdb1 -t f2fs.dump -p '../xfstests-f2fs/postmark' < ../xfstests-f2fs/postmark_run
 
 cat /sys/kernel/debug/f2fs/status
 
@@ -16,5 +16,7 @@ umount /mnt/test
 
 blkparse f2fs -d bp.bin >/dev/null
 btt -i bp.bin >/dev/null
+
+rsvg-convert -f pdf -o io.pdf io.svg
 
 scp all.svg io.svg jaegeuk@mac:~/
