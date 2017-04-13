@@ -53,7 +53,16 @@ Versions:
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
+
+#define F2FS_IOCTL_MAGIC		0xf5
+#define F2FS_IOC_START_ATOMIC_WRITE     _IO(F2FS_IOCTL_MAGIC, 1)
+#define F2FS_IOC_COMMIT_ATOMIC_WRITE    _IO(F2FS_IOCTL_MAGIC, 2)
+#define F2FS_IOC_START_VOLATILE_WRITE   _IO(F2FS_IOCTL_MAGIC, 3)
+#define F2FS_IOC_RELEASE_VOLATILE_WRITE _IO(F2FS_IOCTL_MAGIC, 4)
+#define F2FS_IOC_ABORT_VOLATILE_WRITE   _IO(F2FS_IOCTL_MAGIC, 5)
+#define F2FS_IOC_GARBAGE_COLLECT        _IO(F2FS_IOCTL_MAGIC, 6)
 
 #ifdef _WIN32
 #include <io.h>
@@ -882,8 +891,10 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             }
          else
             {
-            lseek(fd,RND(file_table[number].size), SEEK_SET);
+            ioctl(fd, F2FS_IOC_START_ATOMIC_WRITE);
+            lseek(fd,RND(file_table[number].size - write_block_size), SEEK_SET);
             write_blocks(fd,write_block_size);
+            ioctl(fd, F2FS_IOC_COMMIT_ATOMIC_WRITE);
             close(fd);
             }
 
@@ -937,7 +948,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          printf("decrease the number of transactions.\n");
          break;
          }
-
+#if 0
       if (bias_read!=-1) /* if read/append not locked out... */
          {
          if (RND(10)<bias_read) /* read file */
@@ -958,6 +969,22 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             create_file(buffered);
          else /* delete file */
             delete_file(find_used_file());
+         }
+#endif
+      if (bias_create!=-1) /* if create/delete not locked out... */
+         {
+         if (RND(10)<bias_create) /* create file */
+            {
+            create_file(buffered);
+            delete_file(find_used_file());
+            }
+         else
+            {
+            int i;
+
+            for (i = 0; i < number_update; i++)
+               update_file(find_used_file(),buffered);
+            }
          }
 
       if ((i % percent)==0) /* if another tenth of the work is done...*/

@@ -8,7 +8,7 @@ set update 32
 set location /mnt/test
 set subdirectories 5
 set bias read 0
-set bias create 5
+set bias create 1
 set bias large 1
 set fsync rate 10
 set read 4096
