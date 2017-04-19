@@ -1,0 +1,183 @@
+From 1f313357b80ee7d627c7ff7da2f0ea078a8e2d88 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Tue, 31 Jan 2017 18:16:30 -0800
+Subject: [PATCH 2/2] RFC f2fs: emulate atomic writes for checkpoint and
+ atomic_writes
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ fs/f2fs/checkpoint.c |  2 +-
+ fs/f2fs/data.c       |  2 +-
+ fs/f2fs/f2fs.h       |  4 ++--
+ fs/f2fs/node.c       | 33 ++++++++++++++++-----------------
+ fs/f2fs/segment.c    | 27 +++++++++++++--------------
+ fs/f2fs/segment.h    |  4 +++-
+ 6 files changed, 36 insertions(+), 36 deletions(-)
+
+diff --git a/fs/f2fs/checkpoint.c b/fs/f2fs/checkpoint.c
+index 800be94f8cb3..80c329f8bf4e 100644
+--- a/fs/f2fs/checkpoint.c
++++ b/fs/f2fs/checkpoint.c
+@@ -1245,7 +1245,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
+ 
+ 	clear_sbi_flag(sbi, SBI_IS_DIRTY);
+ 	clear_sbi_flag(sbi, SBI_NEED_CP);
+-	__set_cp_next_pack(sbi);
++	//__set_cp_next_pack(sbi);
+ 
+ 	/*
+ 	 * redirty superblock if metadata like node page or inode cache is
+diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
+index 7d46a8e6d350..10183cc34677 100644
+--- a/fs/f2fs/data.c
++++ b/fs/f2fs/data.c
+@@ -1355,7 +1355,7 @@ int do_write_data_page(struct f2fs_io_info *fio)
+ 	 */
+ 	if (unlikely(fio->old_blkaddr != NEW_ADDR &&
+ 			!is_cold_data(page) &&
+-			!IS_ATOMIC_WRITTEN_PAGE(page) &&
++			//!IS_ATOMIC_WRITTEN_PAGE(page) &&
+ 			need_inplace_update(inode, fio))) {
+ 		f2fs_unlock_op(F2FS_I_SB(inode));
+ 		fio->cp_rwsem_locked = false;
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index bd91118312eb..50df01bf5650 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -1499,8 +1499,8 @@ static inline block_t __start_cp_next_addr(struct f2fs_sb_info *sbi)
+ {
+ 	block_t start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
+ 
+-	if (sbi->cur_cp_pack == 1)
+-		start_addr += sbi->blocks_per_seg;
++//	if (sbi->cur_cp_pack == 1)
++//		start_addr += sbi->blocks_per_seg;
+ 	return start_addr;
+ }
+ 
+diff --git a/fs/f2fs/node.c b/fs/f2fs/node.c
+index ad54e907b97b..56d9aef4aa57 100644
+--- a/fs/f2fs/node.c
++++ b/fs/f2fs/node.c
+@@ -107,30 +107,29 @@ static struct page *get_current_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
+ static struct page *get_next_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
+ {
+ 	struct page *src_page;
+-	struct page *dst_page;
++	//struct page *dst_page;
+ 	pgoff_t src_off;
+-	pgoff_t dst_off;
+-	void *src_addr;
+-	void *dst_addr;
+-	struct f2fs_nm_info *nm_i = NM_I(sbi);
++	//pgoff_t dst_off;
++	//void *src_addr;
++	//void *dst_addr;
+ 
+ 	src_off = current_nat_addr(sbi, nid);
+-	dst_off = next_nat_addr(sbi, src_off);
++	//dst_off = next_nat_addr(sbi, src_off);
+ 
+ 	/* get current nat block page with lock */
+ 	src_page = get_meta_page(sbi, src_off);
+-	dst_page = grab_meta_page(sbi, dst_off);
+-	f2fs_bug_on(sbi, PageDirty(src_page));
++	//dst_page = grab_meta_page(sbi, dst_off);
++	//f2fs_bug_on(sbi, PageDirty(src_page));
+ 
+-	src_addr = page_address(src_page);
+-	dst_addr = page_address(dst_page);
+-	memcpy(dst_addr, src_addr, PAGE_SIZE);
+-	set_page_dirty(dst_page);
+-	f2fs_put_page(src_page, 1);
++	//src_addr = page_address(src_page);
++	//dst_addr = page_address(dst_page);
++	//memcpy(dst_addr, src_addr, PAGE_SIZE);
++	set_page_dirty(src_page);
++	//f2fs_put_page(src_page, 1);
+ 
+-	set_to_next_nat(nm_i, nid);
++//	set_to_next_nat(nm_i, nid);
+ 
+-	return dst_page;
++	return src_page;
+ }
+ 
+ static struct nat_entry *__lookup_nat_cache(struct f2fs_nm_info *nm_i, nid_t n)
+@@ -1357,8 +1356,8 @@ static int __write_node_page(struct page *page, bool atomic, bool *submitted,
+ 		return 0;
+ 	}
+ 
+-	if (atomic && !test_opt(sbi, NOBARRIER))
+-		fio.op_flags |= REQ_PREFLUSH | REQ_FUA;
++//	if (atomic && !test_opt(sbi, NOBARRIER))
++//		fio.op_flags |= REQ_PREFLUSH | REQ_FUA;
+ 
+ 	set_page_writeback(page);
+ 	fio.old_blkaddr = ni.blk_addr;
+diff --git a/fs/f2fs/segment.c b/fs/f2fs/segment.c
+index 02ab5ae89e63..e994f0c4e842 100644
+--- a/fs/f2fs/segment.c
++++ b/fs/f2fs/segment.c
+@@ -2570,29 +2570,28 @@ static struct page *get_current_sit_page(struct f2fs_sb_info *sbi,
+ static struct page *get_next_sit_page(struct f2fs_sb_info *sbi,
+ 					unsigned int start)
+ {
+-	struct sit_info *sit_i = SIT_I(sbi);
+-	struct page *src_page, *dst_page;
+-	pgoff_t src_off, dst_off;
+-	void *src_addr, *dst_addr;
++	struct page *src_page; //, *dst_page;
++	pgoff_t src_off; //, dst_off;
++//	void *src_addr; //, *dst_addr;
+ 
+ 	src_off = current_sit_addr(sbi, start);
+-	dst_off = next_sit_addr(sbi, src_off);
++//	dst_off = next_sit_addr(sbi, src_off);
+ 
+ 	/* get current sit block page without lock */
+ 	src_page = get_meta_page(sbi, src_off);
+-	dst_page = grab_meta_page(sbi, dst_off);
+-	f2fs_bug_on(sbi, PageDirty(src_page));
++//	dst_page = grab_meta_page(sbi, dst_off);
++//	f2fs_bug_on(sbi, PageDirty(src_page));
+ 
+-	src_addr = page_address(src_page);
+-	dst_addr = page_address(dst_page);
+-	memcpy(dst_addr, src_addr, PAGE_SIZE);
++//	src_addr = page_address(src_page);
++//	dst_addr = page_address(dst_page);
++//	memcpy(dst_addr, src_addr, PAGE_SIZE);
+ 
+-	set_page_dirty(dst_page);
+-	f2fs_put_page(src_page, 1);
++	set_page_dirty(src_page);
++//	f2fs_put_page(src_page, 1);
+ 
+-	set_to_next_sit(sit_i, start);
++//	set_to_next_sit(sit_i, start);
+ 
+-	return dst_page;
++	return src_page;
+ }
+ 
+ static struct sit_entry_set *grab_sit_entry_set(void)
+diff --git a/fs/f2fs/segment.h b/fs/f2fs/segment.h
+index 4a85035777dd..85531ff63998 100644
+--- a/fs/f2fs/segment.h
++++ b/fs/f2fs/segment.h
+@@ -568,8 +568,10 @@ static inline bool need_inplace_update(struct inode *inode,
+ 	unsigned int policy = SM_I(sbi)->ipu_policy;
+ 
+ 	/* IPU can be done only for the user data */
+-	if (S_ISDIR(inode->i_mode) || f2fs_is_atomic_file(inode))
++	if (S_ISDIR(inode->i_mode)) // || f2fs_is_atomic_file(inode))
+ 		return false;
++	if (f2fs_is_atomic_file(inode))
++		return true;
+ 
+ 	if (test_opt(sbi, LFS))
+ 		return false;
+-- 
+2.11.0
+
