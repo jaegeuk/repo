@@ -1,0 +1,222 @@
+From ad9c50487eb77f243d75bec2c09572609bcfed52 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@kernel.org>
+Date: Wed, 19 Apr 2017 18:17:58 -0700
+Subject: [PATCH 3/3] f2fs: support quotas
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
+---
+ fs/f2fs/data.c          |  2 +-
+ fs/f2fs/f2fs.h          | 10 +++++++-
+ fs/f2fs/super.c         | 66 +++++++++++++++++++++++++++++++++++++++++++++++++
+ include/linux/f2fs_fs.h | 17 ++++++++++---
+ 4 files changed, 90 insertions(+), 5 deletions(-)
+
+diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
+index 73e46443e081..f3d9fa4615bc 100644
+--- a/fs/f2fs/data.c
++++ b/fs/f2fs/data.c
+@@ -2024,7 +2024,7 @@ void f2fs_invalidate_page(struct page *page, unsigned int offset,
+ 	struct inode *inode = page->mapping->host;
+ 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+ 
+-	if (inode->i_ino >= F2FS_ROOT_INO(sbi) &&
++	if (inode->i_ino >= F2FS_PRJ_QUOTA_INO(sbi) &&
+ 		(offset % PAGE_SIZE || length != PAGE_SIZE))
+ 		return;
+ 
+diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
+index 9843939e25fe..c18ad553b7f8 100644
+--- a/fs/f2fs/f2fs.h
++++ b/fs/f2fs/f2fs.h
+@@ -88,6 +88,9 @@ extern char *fault_name[FAULT_MAX];
+ #define F2FS_MOUNT_FAULT_INJECTION	0x00010000
+ #define F2FS_MOUNT_ADAPTIVE		0x00020000
+ #define F2FS_MOUNT_LFS			0x00040000
++#define F2FS_MOUNT_USRQUOTA		0x00080000
++#define F2FS_MOUNT_GRPQUOTA		0x00100000
++#define F2FS_MOUNT_PRJQUOTA		0x00200000
+ 
+ #define clear_opt(sbi, option)	((sbi)->mount_opt.opt &= ~F2FS_MOUNT_##option)
+ #define set_opt(sbi, option)	((sbi)->mount_opt.opt |= F2FS_MOUNT_##option)
+@@ -513,6 +516,10 @@ struct f2fs_inode_info {
+ 	nid_t i_xattr_nid;		/* node id that contains xattrs */
+ 	loff_t	last_disk_size;		/* lastly written file size */
+ 
++#ifdef CONFIG_QUOTA
++	/* quota space reservation, managed internally by quota code */
++	qsize_t i_reserved_quota;
++#endif
+ 	struct list_head dirty_list;	/* dirty list for dirs and files */
+ 	struct list_head gdirty_list;	/* linked in global dirty list */
+ 	struct list_head inmem_pages;	/* inmemory pages managed by f2fs */
+@@ -924,6 +931,7 @@ struct f2fs_sb_info {
+ 	unsigned int root_ino_num;		/* root inode number*/
+ 	unsigned int node_ino_num;		/* node inode number*/
+ 	unsigned int meta_ino_num;		/* meta inode number*/
++	unsigned int quota_ino_num[MAX_QUOTAS];	/* quota inode numbers */
+ 	unsigned int log_blocks_per_seg;	/* log2 blocks per segment */
+ 	unsigned int blocks_per_seg;		/* blocks per segment */
+ 	unsigned int segs_per_sec;		/* segments per section */
+@@ -1314,7 +1322,7 @@ static inline bool __exist_node_summaries(struct f2fs_sb_info *sbi)
+  */
+ static inline int check_nid_range(struct f2fs_sb_info *sbi, nid_t nid)
+ {
+-	if (unlikely(nid < F2FS_ROOT_INO(sbi)))
++	if (unlikely(nid < F2FS_PRJ_QUOTA_INO(sbi)))
+ 		return -EINVAL;
+ 	if (unlikely(nid >= NM_I(sbi)->max_nid))
+ 		return -EINVAL;
+diff --git a/fs/f2fs/super.c b/fs/f2fs/super.c
+index 97c07a5153e9..b875f3e221f1 100644
+--- a/fs/f2fs/super.c
++++ b/fs/f2fs/super.c
+@@ -22,6 +22,7 @@
+ #include <linux/random.h>
+ #include <linux/exportfs.h>
+ #include <linux/blkdev.h>
++#include <linux/quotaops.h>
+ #include <linux/f2fs_fs.h>
+ #include <linux/sysfs.h>
+ 
+@@ -108,6 +109,7 @@ enum {
+ 	Opt_fault_injection,
+ 	Opt_lazytime,
+ 	Opt_nolazytime,
++	Opt_usrquota, Opt_grpquota, Opt_prjquota,
+ 	Opt_err,
+ };
+ 
+@@ -143,6 +145,9 @@ static match_table_t f2fs_tokens = {
+ 	{Opt_fault_injection, "fault_injection=%u"},
+ 	{Opt_lazytime, "lazytime"},
+ 	{Opt_nolazytime, "nolazytime"},
++	{Opt_usrquota, "usrquota"},	/* user quota enabled */
++	{Opt_grpquota, "grpquota"},	/* group quota enabled */
++	{Opt_prjquota, "prjquota"},	/* project quota enabled */
+ 	{Opt_err, NULL},
+ };
+ 
+@@ -625,6 +630,10 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
+ 	init_rwsem(&fi->dio_rwsem[READ]);
+ 	init_rwsem(&fi->dio_rwsem[WRITE]);
+ 
++#ifdef CONFIG_QUOTA
++	fi->i_reserved_quota = 0;
++	memset(&fi->i_dquot, 0, sizeof(ei->i_dquot));
++#endif
+ 	/* Will be used by directory only */
+ 	fi->i_dir_level = F2FS_SB(sb)->dir_level;
+ 	return &fi->vfs_inode;
+@@ -1191,6 +1200,58 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
+ 	return err;
+ }
+ 
++#ifdef CONFIG_QUOTA
++static char *quotatypes[] = INITQFNAMES;
++#define QTYPE2NAME(t) (quotatypes[t])
++
++static int f2fs_write_dquot(struct dquot *dquot);
++static int f2fs_acquire_dquot(struct dquot *dquot);
++static int f2fs_release_dquot(struct dquot *dquot);
++static int f2fs_mark_dquot_dirty(struct dquot *dquot);
++static int f2fs_write_info(struct super_block *sb, int type);
++static int f2fs_quota_on(struct super_block *sb, int type, int format_id,
++			 const struct path *path);
++static int f2fs_quota_off(struct super_block *sb, int type);
++static int f2fs_quota_on_mount(struct super_block *sb, int type);
++static ssize_t f2fs_quota_read(struct super_block *sb, int type, char *data,
++			       size_t len, loff_t off);
++static ssize_t f2fs_quota_write(struct super_block *sb, int type,
++				const char *data, size_t len, loff_t off);
++static int f2fs_quota_enable(struct super_block *sb, int type, int format_id,
++			     unsigned int flags);
++static int f2fs_enable_quotas(struct super_block *sb);
++static int f2fs_get_next_id(struct super_block *sb, struct kqid *qid);
++
++static struct dquot **f2fs_get_dquots(struct inode *inode)
++{
++	return F2FS_I(inode)->i_dquot;
++}
++
++static const struct dquot_operations f2fs_quota_operations = {
++	.get_reserved_space = f2fs_get_reserved_space,
++	.write_dquot	= f2fs_write_dquot,
++	.acquire_dquot	= f2fs_acquire_dquot,
++	.release_dquot	= f2fs_release_dquot,
++	.mark_dirty	= f2fs_mark_dquot_dirty,
++	.write_info	= f2fs_write_info,
++	.alloc_dquot	= dquot_alloc,
++	.destroy_dquot	= dquot_destroy,
++	.get_projid	= f2fs_get_projid,
++	.get_next_id	= f2fs_get_next_id,
++};
++
++static const struct quotactl_ops f2fs_qctl_operations = {
++	.quota_on	= f2fs_quota_on,
++	.quota_off	= f2fs_quota_off,
++	.quota_sync	= dquot_quota_sync,
++	.get_state	= dquot_get_state,
++	.set_info	= dquot_set_dqinfo,
++	.get_dqblk	= dquot_get_dqblk,
++	.set_dqblk	= dquot_set_dqblk,
++	.get_nextdqblk	= dquot_get_next_dqblk,
++};
++#endif
++
+ static struct super_operations f2fs_sops = {
+ 	.alloc_inode	= f2fs_alloc_inode,
+ 	.drop_inode	= f2fs_drop_inode,
+@@ -1198,6 +1259,11 @@ static struct super_operations f2fs_sops = {
+ 	.write_inode	= f2fs_write_inode,
+ 	.dirty_inode	= f2fs_dirty_inode,
+ 	.show_options	= f2fs_show_options,
++#ifdef CONFIG_QUOTA
++	.quota_read	= f2fs_quota_read,
++	.quota_write	= f2fs_quota_write,
++	.get_dquots	= f2fs_get_dquots,
++#endif
+ 	.evict_inode	= f2fs_evict_inode,
+ 	.put_super	= f2fs_put_super,
+ 	.sync_fs	= f2fs_sync_fs,
+diff --git a/include/linux/f2fs_fs.h b/include/linux/f2fs_fs.h
+index 639cbdf65e2b..d757bbb2cbe1 100644
+--- a/include/linux/f2fs_fs.h
++++ b/include/linux/f2fs_fs.h
+@@ -29,12 +29,22 @@
+ #define F2FS_BYTES_TO_BLK(bytes)	((bytes) >> F2FS_BLKSIZE_BITS)
+ #define F2FS_BLK_TO_BYTES(blk)		((blk) << F2FS_BLKSIZE_BITS)
+ 
+-/* 0, 1(node nid), 2(meta nid) are reserved node id */
+-#define F2FS_RESERVED_NODE_NUM		3
++enum {
++	USR_QUOTA = 0,
++	GRP_QUOTA,
++	PRJ_QUOTA,
++	MAX_QUOTAS,
++};
++
++/* 0, 1(node nid), 2(meta nid) + MAX_QUOTAS are reserved node id */
++#define F2FS_RESERVED_NODE_NUM		(3 + MAX_QUOTAS)
+ 
+ #define F2FS_ROOT_INO(sbi)	((sbi)->root_ino_num)
+ #define F2FS_NODE_INO(sbi)	((sbi)->node_ino_num)
+ #define F2FS_META_INO(sbi)	((sbi)->meta_ino_num)
++#define F2FS_USR_QUOTA_INO(sbi)	((sbi)->quota_ino_num[USR_QUOTA])
++#define F2FS_GRP_QUOTA_INO(sbi)	((sbi)->quota_ino_num[GRP_QUOTA])
++#define F2FS_PRJ_QUOTA_INO(sbi)	((sbi)->quota_ino_num[PRJ_QUOTA])
+ 
+ #define F2FS_IO_SIZE(sbi)	(1 << (sbi)->write_io_size_bits) /* Blocks */
+ #define F2FS_IO_SIZE_KB(sbi)	(1 << ((sbi)->write_io_size_bits + 2)) /* KB */
+@@ -108,7 +118,8 @@ struct f2fs_super_block {
+ 	__u8 encryption_level;		/* versioning level for encryption */
+ 	__u8 encrypt_pw_salt[16];	/* Salt used for string2key algorithm */
+ 	struct f2fs_device devs[MAX_DEVICES];	/* device list */
+-	__u8 reserved[327];		/* valid reserved region */
++	__le32 quota_ino[MAX_QUOTAS];	/* inodes for tracking quotas */
++	__u8 reserved[315];		/* valid reserved region */
+ } __packed;
+ 
+ /*
+-- 
+2.11.0
+
