@@ -1,4 +1,4 @@
-From ad9c50487eb77f243d75bec2c09572609bcfed52 Mon Sep 17 00:00:00 2001
+From 346bab1be396370f82a7372d28e6e0af7f90cfe4 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Wed, 19 Apr 2017 18:17:58 -0700
 Subject: [PATCH 3/3] f2fs: support quotas
@@ -12,10 +12,10 @@ Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
  4 files changed, 90 insertions(+), 5 deletions(-)
 
 diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
-index 73e46443e081..f3d9fa4615bc 100644
+index caaf834c65f7..14a3d82cd599 100644
 --- a/fs/f2fs/data.c
 +++ b/fs/f2fs/data.c
-@@ -2024,7 +2024,7 @@ void f2fs_invalidate_page(struct page *page, unsigned int offset,
+@@ -2031,7 +2031,7 @@ void f2fs_invalidate_page(struct page *page, unsigned int offset,
  	struct inode *inode = page->mapping->host;
  	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
  
@@ -67,7 +67,7 @@ index 9843939e25fe..c18ad553b7f8 100644
  	if (unlikely(nid >= NM_I(sbi)->max_nid))
  		return -EINVAL;
 diff --git a/fs/f2fs/super.c b/fs/f2fs/super.c
-index 97c07a5153e9..b875f3e221f1 100644
+index 4cd3bee6775f..5ec98f5fda4e 100644
 --- a/fs/f2fs/super.c
 +++ b/fs/f2fs/super.c
 @@ -22,6 +22,7 @@
@@ -179,7 +179,7 @@ index 97c07a5153e9..b875f3e221f1 100644
  	.put_super	= f2fs_put_super,
  	.sync_fs	= f2fs_sync_fs,
 diff --git a/include/linux/f2fs_fs.h b/include/linux/f2fs_fs.h
-index 639cbdf65e2b..d757bbb2cbe1 100644
+index 093549e10ee2..0684974bc181 100644
 --- a/include/linux/f2fs_fs.h
 +++ b/include/linux/f2fs_fs.h
 @@ -29,12 +29,22 @@

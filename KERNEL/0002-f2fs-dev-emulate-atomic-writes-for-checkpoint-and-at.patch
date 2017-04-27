@@ -1,4 +1,4 @@
-From 33cf2205f25c1ec57fae14c6149964c4cf0de7f3 Mon Sep 17 00:00:00 2001
+From 61cf517826a55ba77915dae17425ef10212bd398 Mon Sep 17 00:00:00 2001
 From: Jaegeuk Kim <jaegeuk@kernel.org>
 Date: Tue, 31 Jan 2017 18:16:30 -0800
 Subject: [PATCH 2/3] f2fs-dev: emulate atomic writes for checkpoint and
@@ -7,12 +7,11 @@ Subject: [PATCH 2/3] f2fs-dev: emulate atomic writes for checkpoint and
 Signed-off-by: Jaegeuk Kim <jaegeuk@kernel.org>
 ---
  fs/f2fs/checkpoint.c |  2 +-
- fs/f2fs/data.c       | 10 ++++++++--
+ fs/f2fs/data.c       | 20 ++++++++++++++------
  fs/f2fs/f2fs.h       |  4 ++--
  fs/f2fs/node.c       | 33 ++++++++++++++++-----------------
- fs/f2fs/segment.c    | 27 +++++++++++++--------------
- fs/f2fs/segment.h    |  4 +++-
- 6 files changed, 43 insertions(+), 37 deletions(-)
+ fs/f2fs/segment.c    | 31 +++++++++++++++----------------
+ 5 files changed, 48 insertions(+), 42 deletions(-)
 
 diff --git a/fs/f2fs/checkpoint.c b/fs/f2fs/checkpoint.c
 index 800be94f8cb3..80c329f8bf4e 100644
@@ -28,21 +27,27 @@ index 800be94f8cb3..80c329f8bf4e 100644
  	/*
  	 * redirty superblock if metadata like node page or inode cache is
 diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
-index c2b98e44c5f3..73e46443e081 100644
+index e7e5f279db3a..caaf834c65f7 100644
 --- a/fs/f2fs/data.c
 +++ b/fs/f2fs/data.c
-@@ -1333,8 +1333,8 @@ static inline bool need_inplace_update(struct f2fs_io_info *fio)
+@@ -1333,12 +1333,13 @@ static inline bool need_inplace_update(struct f2fs_io_info *fio)
  {
+ 	struct inode *inode = fio->page->mapping->host;
+ 
+-	if (S_ISDIR(inode->i_mode) || f2fs_is_atomic_file(inode))
+-		return false;
++	//if (S_ISDIR(inode->i_mode)) || f2fs_is_atomic_file(inode))
++	if (f2fs_is_atomic_file(inode))
++		return true;
  	if (is_cold_data(fio->page))
  		return false;
--	if (IS_ATOMIC_WRITTEN_PAGE(fio->page))
+ 	if (IS_ATOMIC_WRITTEN_PAGE(fio->page))
 -		return false;
-+//	if (IS_ATOMIC_WRITTEN_PAGE(fio->page))
-+//		return false;
++		return true;
  
- 	return need_inplace_update_policy(fio->page->mapping->host, fio);
+ 	return need_inplace_update_policy(inode, fio);
  }
-@@ -1345,6 +1345,12 @@ static inline bool valid_ipu_blkaddr(struct f2fs_io_info *fio)
+@@ -1349,6 +1350,12 @@ static inline bool valid_ipu_blkaddr(struct f2fs_io_info *fio)
  		return false;
  	if (fio->old_blkaddr == NULL_ADDR)
  		return false;
@@ -55,6 +60,21 @@ index c2b98e44c5f3..73e46443e081 100644
  	return true;
  }
  
+@@ -1394,10 +1401,11 @@ int do_write_data_page(struct f2fs_io_info *fio)
+ 	 * it had better in-place writes for updated data.
+ 	 */
+ 	if (ipu_force || (valid_ipu_blkaddr(fio) && need_inplace_update(fio))) {
+-		f2fs_bug_on(fio->sbi, !fio->cp_rwsem_locked);
+ 		f2fs_put_dnode(&dn);
+-		f2fs_unlock_op(fio->sbi);
+-		fio->cp_rwsem_locked = false;
++		if (fio->cp_rwsem_locked) {
++			f2fs_unlock_op(fio->sbi);
++			fio->cp_rwsem_locked = false;
++		}
+ 
+ 		err = rewrite_data_page(fio);
+ 		trace_f2fs_do_write_data_page(fio->page, IPU);
 diff --git a/fs/f2fs/f2fs.h b/fs/f2fs/f2fs.h
 index bf48213642ab..9843939e25fe 100644
 --- a/fs/f2fs/f2fs.h
@@ -131,10 +151,28 @@ index b99e318bce58..4f9489a13224 100644
  	set_page_writeback(page);
  	fio.old_blkaddr = ni.blk_addr;
 diff --git a/fs/f2fs/segment.c b/fs/f2fs/segment.c
-index 9913a2088148..2389d16a1c7d 100644
+index b0babb73a076..8a5018729623 100644
 --- a/fs/f2fs/segment.c
 +++ b/fs/f2fs/segment.c
-@@ -2582,29 +2582,28 @@ static struct page *get_current_sit_page(struct f2fs_sb_info *sbi,
+@@ -312,6 +312,7 @@ static int __commit_inmem_pages(struct inode *inode,
+ 			fio.page = page;
+ 			fio.old_blkaddr = NULL_ADDR;
+ 			fio.encrypted_page = NULL;
++			fio.cp_rwsem_locked = false;
+ 			err = do_write_data_page(&fio);
+ 			if (err) {
+ 				unlock_page(page);
+@@ -327,8 +328,7 @@ static int __commit_inmem_pages(struct inode *inode,
+ 	}
+ 
+ 	if (last_idx != ULONG_MAX)
+-		f2fs_submit_merged_bio_cond(sbi, inode, 0, last_idx,
+-							DATA, WRITE);
++		f2fs_submit_merged_bio(sbi, DATA, WRITE);
+ 
+ 	if (!err)
+ 		__revoke_inmem_pages(inode, revoke_list, false, false);
+@@ -2581,29 +2581,28 @@ static struct page *get_current_sit_page(struct f2fs_sb_info *sbi,
  static struct page *get_next_sit_page(struct f2fs_sb_info *sbi,
  					unsigned int start)
  {
@@ -177,22 +215,6 @@ index 9913a2088148..2389d16a1c7d 100644
  }
  
  static struct sit_entry_set *grab_sit_entry_set(void)
-diff --git a/fs/f2fs/segment.h b/fs/f2fs/segment.h
-index c51273c0c1ef..4b7465a01845 100644
---- a/fs/f2fs/segment.h
-+++ b/fs/f2fs/segment.h
-@@ -571,8 +571,10 @@ static inline bool need_inplace_update_policy(struct inode *inode,
- 	unsigned int policy = SM_I(sbi)->ipu_policy;
- 
- 	/* IPU can be done only for the user data */
--	if (S_ISDIR(inode->i_mode) || f2fs_is_atomic_file(inode))
-+	if (S_ISDIR(inode->i_mode)) // || f2fs_is_atomic_file(inode))
- 		return false;
-+	if (f2fs_is_atomic_file(inode))
-+		return true;
- 
- 	if (test_opt(sbi, LFS))
- 		return false;
 -- 
 2.11.0
 
