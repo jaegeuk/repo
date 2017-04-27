@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <linux/types.h>
 #include <time.h>
 
 #define F2FS_IOCTL_MAGIC		0xf5
@@ -13,11 +14,17 @@
 #define F2FS_IOC_START_VOLATILE_WRITE   _IO(F2FS_IOCTL_MAGIC, 3)
 #define F2FS_IOC_RELEASE_VOLATILE_WRITE _IO(F2FS_IOCTL_MAGIC, 4)
 #define F2FS_IOC_ABORT_VOLATILE_WRITE   _IO(F2FS_IOCTL_MAGIC, 5)
-#define F2FS_IOC_GARBAGE_COLLECT        _IO(F2FS_IOCTL_MAGIC, 6)
-#define F2FS_IOC_FLUSH_DEVICE		_IO(F2FS_IOCTL_MAGIC, 10)
+#define F2FS_IOC_GARBAGE_COLLECT        _IOW(F2FS_IOCTL_MAGIC, 6, __u32)
+#define F2FS_IOC_FLUSH_DEVICE		_IOW(F2FS_IOCTL_MAGIC, 10,	\
+						struct f2fs_flush_device)
 
 #define BLOCK_SIZE	4096
 #define DB_BLOCKS	256
+
+struct f2fs_flush_device {
+	__u32 dev_num;            /* device number to flush */
+	__u32 segments;           /* # of segments to flush */
+};
 
 static long long timediff_ms(struct timeval start, struct timeval end)
 {
@@ -32,20 +39,24 @@ int create_files(char *path, int nblocks, int nfiles, int atomic, int flush)
 	char buf[BLOCK_SIZE];
 	char name[BLOCK_SIZE];
 	struct timeval start, end;
-	unsigned long long diff_ms;
+	unsigned long long diff_ms_flush;
+	struct f2fs_flush_device range = {0, 256};
 	int i, j, fd;
 
+	mkdir(path, 0777);
+#if 0
 	if (flush) {
 		gettimeofday(&start, NULL);
 		sprintf(name, "%s/base", path);
 		fd = open(name, O_CREAT|O_RDWR);
-		ioctl(fd, F2FS_IOC_FLUSH_DEVICE);
+		if (fd < 0)
+			perror("fd error");
+		ioctl(fd, F2FS_IOC_FLUSH_DEVICE, &range);
 		close(fd);
 		gettimeofday(&end, NULL);
-		printf("Flush time (ms) = %llu\n", timediff_ms(start, end));
+		diff_ms_flush = timediff_ms(start, end);
 	}
-
-	mkdir(path, 0777);
+#endif
 
 	/* create atomic file */
 	if (atomic) {
@@ -62,6 +73,18 @@ int create_files(char *path, int nblocks, int nfiles, int atomic, int flush)
 			close(fd);
 		}
 	}
+	sync();
+
+	if (flush) {
+		gettimeofday(&start, NULL);
+		sprintf(name, "%s/base", path);
+		fd = open(name, O_CREAT|O_RDWR);
+		ioctl(fd, F2FS_IOC_FLUSH_DEVICE, &range);
+		close(fd);
+		gettimeofday(&end, NULL);
+		diff_ms_flush = timediff_ms(start, end);
+	}
+
 	sync();
 
 	gettimeofday(&start, NULL);
@@ -84,7 +107,7 @@ int create_files(char *path, int nblocks, int nfiles, int atomic, int flush)
 	}
 	gettimeofday(&end, NULL);
 
-	printf("Elapsed time (ms) = %llu\n", timediff_ms(start, end));
+	printf("%llu %llu\n", timediff_ms(start, end), diff_ms_flush);
 	return 0;
 }
 
