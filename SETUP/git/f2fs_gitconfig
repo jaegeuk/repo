@@ -17,6 +17,26 @@
 	to = linux-kernel@vger.kernel.org
 	to = linux-fsdevel@vger.kernel.org
 	to = linux-f2fs-devel@lists.sourceforge.net
+#	to = tytso@mit.edu
+#	to = linux-ext4@vger.kernel.org
 [remote "linus"]
 	url = git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
 	fetch = +refs/heads/*:refs/remotes/linus/*
+[remote "jens"]
+	url = git://git.kernel.org/pub/scm/linux/kernel/git/axboe/linux-block.git
+	fetch = +refs/heads/*:refs/remotes/jens/*
+[branch "dev-test"]
+	remote = origin
+	merge = refs/heads/dev-test
+[branch "linux-3.18"]
+	remote = origin
+	merge = refs/heads/linux-3.18
+[branch "linux-3.10"]
+	remote = origin
+	merge = refs/heads/linux-3.10
+[branch "linux-3.4"]
+	remote = origin
+	merge = refs/heads/linux-3.4
+[branch "test"]
+	remote = jens
+	merge = refs/heads/test
