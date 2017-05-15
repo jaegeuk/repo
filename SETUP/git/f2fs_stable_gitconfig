@@ -1,0 +1,36 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	precomposeunicode = true
+[remote "origin"]
+	url = gitolite.kernel.org:/pub/scm/linux/kernel/git/jaegeuk/f2fs-stable
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+[remote "upstream"]
+	url = git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+	fetch = +refs/heads/*:refs/remotes/upstream/*
+[remote "f2fs"]
+	url = ~/Work/f2fs
+#	gitolite.kernel.org:/pub/scm/linux/kernel/git/jaegeuk/f2fs
+	fetch = +refs/heads/*:refs/remotes/f2fs/*
+[branch "linux-4.1.y"]
+	remote = upstream
+	merge = refs/heads/linux-4.1.y
+[sendemail]
+	to = gregkh@linuxfoundation.org
+	to = stable@vger.kernel.org
+#	to = linux-kernel@vger.kernel.org
+#	to = linux-fsdevel@vger.kernel.org
+#	to = linux-f2fs-devel@lists.sourceforge.net
+#	to = tytso@mit.edu
+#	to = linux-ext4@vger.kernel.org
+[branch "linux-3.18.y"]
+	remote = origin
+	merge = refs/heads/linux-3.18.y
+[branch "linux-4.9.y"]
+	remote = upstream
+	merge = refs/heads/linux-4.9.y

@@ -1,0 +1,21 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	precomposeunicode = true
+[sendemail]
+	to = fstests@vger.kernel.org
+	to = linux-f2fs-devel@lists.sourceforge.net
+[remote "origin"]
+	url = https://github.com/jaegeuk/xfstests-f2fs.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[remote "xfs"]
+	url = git://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git
+	fetch = +refs/heads/*:refs/remotes/xfs/*
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+[branch "f2fs"]
+	remote = origin
+	merge = refs/heads/f2fs
