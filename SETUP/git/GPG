@@ -1,0 +1,10 @@
+# Assumes homebrew and existing key-pair
+brew install pinentry-mac
+# Get the secret key value
+gpg2 --list-secret-keys | grep ^sec
+git config --global user.signingkey {secret-value}
+git config --global gpg.program $(which gpg2)
+# Sign everything by default
+git config --global commit.gpgsign true
+echo "no-tty" >> ~/.gnupg/gpg.conf
+echo $(which pinentry-mac) >> ~/.gnupg/gpg-agent.conf
