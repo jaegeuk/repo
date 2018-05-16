@@ -1,3 +1,13 @@
+/etc/netplan/xx.
+
+ens32:
+   dhcp4: no
+   dhcp6: no
+   addresses: [192.168.83.102/24]
+
+netplan apply
+
+
 /etc/default/grub
  - console=tty0 console=ttyS0,115200n8 loglevel=8"
 
