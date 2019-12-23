@@ -1,0 +1,50 @@
+1. install
+sudo apt-get install qemu-kvm qemu virt-manager virt-viewer libvirt-bin
+qemu-img create -f qcow2 file.qcow 20G
+qemu-img create -f qcow2 file-test.qcow 20G
+qemu-system-x86_64 -hda file.qcow -boot d -cdrom /home/sk/Soft_Backup/OS\ Images/New/ubuntu-15.04-server-amd64.iso -m 640
+
+2. run
+
+#!/bin/bash
+
+DIR=/mnt/box/qemu
+
+_start()
+{
+	sudo kvm -m 4g -cpu host -smp 8 -drive file=$DIR/$1.qcow,if=virtio -drive file=$DIR/$1-test.qcow,if=virtio -nographic -serial mon:stdio -net nic,model=virtio -net user,hostfwd=tcp::$2-:22 > ./$1.out
+}
+
+_start file 9222 &
+_start dir 9223 &
+_start whole 9224 &
+
+
+3. bash
+
+color_prompt=yes
+
+parse_git_branch() {
+
+    git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ (\1)/'
+}
+
+
+if [ "$color_prompt" = yes ]; then
+    PS1="\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$(parse_git_branch)\[\033[00m\] $ "
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+
+4. /etc/default/grub
+"console=ttyS0 console=tty0 ignore_loglevel"
+
+5. ssh
+cp ~/id_rsa.pub to ~/.ssh/authorized_keys
+
+
+6. root : /etc/sudoers
+jaegeuk	ALL=(ALL) NOPASSWD: ALL
+
