@@ -12,6 +12,7 @@ git branch -d -r origin/linux-2.6.11.y
 git rebase -i HEAD~4
 git checkout android, ~~~
 git rebase --onto [current HEAD] [remote start - 1] [remote end]
+git rebase --rebase-merges
 
 4. Checkout
 git checkout master
