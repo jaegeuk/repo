@@ -1,0 +1,8 @@
+1. qemu-img.sh *
+2. install.sh *
+3. qemu.sh all
+4. scp.sh *
+5. tmux.sh
+6. sudo.sh
+7. INSTALL
+8. remove SECURITY_OPTIONS->KEY

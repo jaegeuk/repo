@@ -1,0 +1,63 @@
+From 082e8dee54841023a6fcd4f6f24a0dd780e17f07 Mon Sep 17 00:00:00 2001
+From: Jaegeuk Kim <jaegeuk@google.com>
+Date: Tue, 15 May 2018 17:22:27 -0700
+Subject: [PATCH] test-dir
+
+Signed-off-by: Jaegeuk Kim <jaegeuk@google.com>
+---
+ run.sh | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/run.sh b/run.sh
+index edc0ba1e..ec355f69 100755
+--- a/run.sh
++++ b/run.sh
+@@ -7,7 +7,7 @@
+ VER=f2fs
+ #DEV=nvme0n1p1
+ #DEV=sdb1
+-DEV=md0
++DEV=sdb
+ MAIN=nvme0n1p1
+ MAINDEV=sdb2
+ 
+@@ -215,11 +215,12 @@ por_fsstress()
+ 	_fs_opts
+ 
+ 	while true; do
+-		ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 10 -r -f fsync=8 -f sync=0 -f write=4 -f dwrite=2 -f truncate=6 -f allocsp=0 -f bulkstat=0 -f bulkstat1=0 -f freesp=0 -f zero=1 -f collapse=1 -f insert=1 -f resvsp=0 -f unresvsp=0 -S t -p 20 -n 200000 -d $TESTDIR/test &
+-		sleep 10
++		ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 1000 -r -z -f chown=1 -f creat=4 -f dread=1 -f dwrite=1 -f fallocate=1 -f fdatasync=1 -f fiemap=1 -f fsync=1 -f getattr=1 -f getdents=1 -f link=1 -f mkdir=0 -f mknod=1 -f punch=1 -f zero=1 -f collapse=1 -f insert=1 -f read=1 -f readlink=1 -f rename=1 -f rmdir=1 -f setxattr=1 -f stat=1 -f symlink=2 -f truncate=2 -f unlink=2 -f write=4 -S t -p 10 -n 10000 -d $TESTDIR/test &
++		#ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 10 -r -f fsync=8 -f sync=0 -f write=4 -f dwrite=2 -f truncate=6 -f allocsp=0 -f bulkstat=0 -f bulkstat1=0 -f freesp=0 -f zero=1 -f collapse=1 -f insert=1 -f resvsp=0 -f unresvsp=0 -S t -p 20 -n 200000 -d $TESTDIR/test &
++		sleep 20
+ 		src/godown $TESTDIR
+ 		killall fsstress
+-		sleep 5
++		sleep 1
+ 		umount $TESTDIR
+ 		echo 3 > /proc/sys/vm/drop_caches
+ 		_fsck
+@@ -237,9 +238,9 @@ _fsstress()
+ {
+ 	while true; do
+ 		#ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches && sleep 1" -X 10 -r -S t -p 10 -n 1000000 -d $TESTDIR/test
+-		ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 1000 -r -f fsync=0 -f sync=0 -f write=10 -f dwrite=4 -f truncate=6 -f allocsp=0 -f bulkstat=0 -f bulkstat1=0 -f freesp=0 -f zero=1 -f collapse=1 -f insert=1 -f resvsp=0 -f unresvsp=0 -f link=1 -S t -p 10 -n 200000 -d $TESTDIR/test
++		#ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 1000 -r -f fsync=0 -f sync=0 -f write=10 -f dwrite=4 -f truncate=6 -f allocsp=0 -f bulkstat=0 -f bulkstat1=0 -f freesp=0 -f zero=1 -f collapse=1 -f insert=1 -f resvsp=0 -f unresvsp=0 -f link=1 -S t -p 10 -n 200000 -d $TESTDIR/test
+ 		#ltp/fsstress -r -f fsync=0 -f sync=0 -f write=10 -f dwrite=4 -f truncate=6 -f allocsp=0 -f bulkstat=0 -f bulkstat1=0 -f freesp=0 -f zero=1 -f collapse=1 -f insert=1 -f resvsp=0 -f unresvsp=0 -f link=1 -S t -p 10 -n 200000 -d $TESTDIR/test
+-		#ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 1000 -r -z -f chown=1 -f creat=4 -f dread=1 -f dwrite=1 -f fallocate=1 -f fdatasync=1 -f fiemap=1 -f fsync=1 -f getattr=1 -f getdents=1 -f link=1 -f mkdir=0 -f mknod=1 -f punch=1 -f zero=1 -f collapse=1 -f insert=1 -f read=1 -f readlink=1 -f rename=1 -f rmdir=1 -f setxattr=1 -f stat=1 -f symlink=2 -f truncate=2 -f unlink=2 -f write=4 -S t -p 10 -n 10000 -d $TESTDIR/test
++		ltp/fsstress -x "echo 3 > /proc/sys/vm/drop_caches" -X 1000 -r -z -f chown=1 -f creat=4 -f dread=1 -f dwrite=1 -f fallocate=1 -f fdatasync=1 -f fiemap=1 -f fsync=1 -f getattr=1 -f getdents=1 -f link=1 -f mkdir=0 -f mknod=1 -f punch=1 -f zero=1 -f collapse=1 -f insert=1 -f read=1 -f readlink=1 -f rename=1 -f rmdir=1 -f setxattr=1 -f stat=1 -f symlink=2 -f truncate=2 -f unlink=2 -f write=4 -S t -p 10 -n 10000 -d $TESTDIR/test
+ 		umount $TESTDIR
+ 		_fsck
+ 		_mount f2fs
+@@ -544,7 +545,7 @@ reload)
+ 	#_error
+ 	_mount f2fs
+ 	#_fs_opts
+-#	echo foo | f2fscrypt add_key -S 0x12 $TESTDIR
++	echo foo | f2fscrypt add_key -S 0x12 $TESTDIR
+ 	;;
+ reload_ko)
+ 	_umount
+-- 
+2.14.1
+

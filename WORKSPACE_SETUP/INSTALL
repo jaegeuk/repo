@@ -1,0 +1,103 @@
+#!/bin/bash
+
+_f2fs()
+{
+	git clone https://github.com/jaegeuk/f2fs.git
+	apt-get install -y libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf autopoint dwarves
+	cd f2fs
+	git checkout g-dev-test
+}
+
+_f2fs-tools()
+{
+	git clone https://github.com/jaegeuk/f2fs-tools.git
+	apt-get install -y uuid-dev pkg-config autoconf libtool libselinux1-dev
+	cd f2fs-tools
+	git checkout g-dev-test
+	./autogen.sh
+	./configure --disable-dependency-tracking
+	make -j4
+	make install
+}
+
+_xfstests()
+{
+	git clone https://github.com/jaegeuk/xfstests-f2fs.git
+	sudo apt-get install -y xfslibs-dev uuid-dev libtool-bin \
+		e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
+		libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
+		uuid-runtime python sqlite3 liburing-dev acl attr attr-dev acl-dev keyutils
+	cd xfstests-f2fs
+	git checkout f2fs
+	make -j4
+	make install
+	sudo useradd -m fsgqa
+	sudo groupadd fsgqa
+	sudo useradd 123456-fsgqa
+	sudo useradd fsgqa2
+	mkdir /mnt/test
+	mkdir /mnt/scratch
+}
+
+_quota()
+{
+	git clone git://git.kernel.org/pub/scm/utils/quota/quota-tools.git
+	apt-get install -y libxft-dev libxinerama-dev libxpm-dev libjpeg-dev libxrandr-dev libsm-dev autoconf autopoint automake libtool gettext
+	cd quota-tools
+	./autogen.sh
+	./configure
+	make -j4
+	make install
+}
+
+_e2fs()
+{
+	git clone git://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git
+	cd e2fsprogs
+	./configure
+	make -j4
+	make install
+}
+
+_xfsprogs()
+{
+	git clone git://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git
+	apt install -y libini-config-dev libinih1 libinih-dev libblkid-dev
+	cd xfsprogs-dev
+	make -j4
+	make install-dev
+}
+
+_fscrypt()
+{
+	git clone https://github.com/google/fscrypt.git
+	wget https://golang.org/dl/go1.16.linux-amd64.tar.gz
+	tar -C /usr/local -xzf go1.16.linux-amd64.tar.gz
+	echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc
+	export "PATH=$PATH:/usr/local/go/bin"
+	apt install -y libpam0g-dev
+	cd fscrypt
+	make -j4
+	make install
+}
+
+_pahole()
+{
+	apt-get install -y cmake libdw-dev libelf-dev libdwarf-dev
+	git clone git://git.kernel.org/pub/scm/devel/pahole/pahole.git
+	cd pahole
+	git am ../SETUP/2-0001-remove-ftrace-filter.patch.txt
+	mkdir build
+	cd build
+	cmake -D__LIB=lib ..
+	make install
+}
+
+(_f2fs)
+(_f2fs-tools)
+(_xfstests)
+(_quota)
+(_e2fs)
+(_xfsprogs)
+(_fscrypt)
+(_pahole)
