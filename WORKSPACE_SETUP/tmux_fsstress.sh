@@ -6,6 +6,7 @@ SUDO="sudo su"
 DSTAT="clear && sudo dstat -cmd"
 QUOTA1="quotacheck -u -g /mnt/test"
 QUOTA2="watch -n 1 repquota -u -g /mnt/test"
+TMUX="/tmp/tmux.log"
 
 _get_shell()
 {
@@ -14,7 +15,8 @@ _get_shell()
 
 _base_view()
 {
-	tmux list-window | grep "0: base"
+	tmux list-window > $TMUX
+        cat $TMUX | grep "0: base"
 	if [ $? -eq 0 ]; then
 		return
 	fi
@@ -108,8 +110,10 @@ _servers_4()
 
 _stress_view()
 {
+  echo 2
 	echo $2
-	tmux list-window | grep "$2: $1"
+	tmux list-window > $TMUX
+	cat $TMUX | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
@@ -117,15 +121,13 @@ _stress_view()
 	tmux new-window -n "$1" "nice -20 ssh -p 9222 jaegeuk@127.0.0.1"
 	tmux selectp -t 0
 	tmux splitw -h -p 66 "nice -20 ssh -p 9223 jaegeuk@127.0.0.1"
-	tmux selectp -t 1
-	tmux splitw -h -p 50 "nice -20 ssh -p 9224 jaegeuk@127.0.0.1"
 
-	for i in `seq 0 2`
+	for i in `seq 0 1`
 	do
 		_sudo $i
 	done
 
-	for i in `seq 0 2`
+	for i in `seq 0 1`
 	do
 		case $1 in
 		"mon") _watch $i;;
@@ -141,20 +143,18 @@ _stress_view()
 _dmesg_view()
 {
 	echo $2
-	tmux list-window | grep "$2: $1"
+	tmux list-window > $TMUX
+	cat $TMUX | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
 
 	tmux new-window -n $1
 	tmux selectp -t 0
-	tmux splitw -v -p 66
-	tmux selectp -t 2
 	tmux splitw -v -p 50
 
 	_klog 0 "file"
 	_klog 1 "dir"
-	_klog 2 "whole"
 
 	tmux setw synchronize-panes on
 }
@@ -165,7 +165,9 @@ if [ $? -ne 0 ]; then
 	tmux send-keys "cmd"
 fi
 
+  echo 2
 _base_view
+  echo 2
 _stress_view fsstress 1
 _stress_view mon 2
 _stress_view quota 3
