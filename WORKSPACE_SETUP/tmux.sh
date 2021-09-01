@@ -1,7 +1,8 @@
 #!/bin/bash
 
 WATCH="watch -n .2 cat /sys/kernel/debug/f2fs/status"
-KER="tail -f /var/log/kern.log"
+QUOTA="watch -n 1 repquota -u -g /mnt/test"
+KER="tail -f "
 SUDO="sudo su"
 DSTAT="clear && sudo dstat -cmd"
 TMUX="/tmp/tmux.log"
@@ -19,14 +20,14 @@ _base_view()
 		return
 	fi
 
-	tmux new-window -n base
-	tmux selectp -t 0
-	tmux splitw -h -p 50
-	tmux splitw -h -p 50
+	tmux new-window -n base "nmon"
+	tmux send-keys "cmd"
+	#tmux selectp -t 0
+	#tmux splitw -h -p 50
+	#tmux splitw -h -p 50
 	#tmux selectp -t 0
 	#tmux splitw -h
 #	tmux setw synchronize-panes on
-	tmux move-window -t 0
 }
 
 _sudo()
@@ -45,10 +46,17 @@ _watch()
 	tmux send-keys KPenter
 }
 
+_quota()
+{
+	tmux selectp -t $1
+	tmux send-keys "$QUOTA"
+	tmux send-keys KPenter
+}
+
 _klog()
 {
 	tmux selectp -t $1
-	tmux send-keys "$KER"
+	tmux send-keys "$KER $2.out"
 	tmux send-keys KPenter
 }
 
@@ -104,31 +112,71 @@ _stress_view()
 {
 	echo $2
 	tmux list-window > $TMUX
+        cat $TMUX | grep "$2: $1"
+	if [ $? -eq 0 ]; then
+		return
+	fi
+
+	tmux new-window -n $1 "nice -20 ssh -p 9223 jaegeuk@127.0.0.1"
+
+	tmux selectp -t 0
+	tmux splitw -h -p 80 "nice -20 ssh -p 9224 jaegeuk@127.0.0.1"
+	tmux selectp -t 1
+	tmux splitw -h -p 75 "nice -20 ssh -p 9225 jaegeuk@127.0.0.1"
+	tmux selectp -t 2
+	tmux splitw -h -p 66 "nice -20 ssh -p 9227 jaegeuk@127.0.0.1"
+	tmux selectp -t 3
+	tmux splitw -h -p 50 "nice -20 ssh -p 9226 jaegeuk@127.0.0.1"
+
+	for i in `seq 0 4`
+	do
+		_sudo $i
+		case $1 in
+		mon) _watch $i;;
+		quota) _quota $i;;
+		esac
+	done
+
+	tmux setw synchronize-panes on
+}
+
+_dmesg_view()
+{
+	echo $2
+	tmux list-window > $TMUX
 	cat $TMUX | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
 
-	tmux new-window -n $1 "ssh 192.168.56.101"
+	tmux new-window -n $1
 	tmux selectp -t 0
-	tmux splitw -h -p 66 "ssh 192.168.56.102"
+	tmux splitw -v -p 80
+	tmux selectp -t 1
+	tmux splitw -v -p 75
 	tmux selectp -t 2
-	tmux splitw -h -p 50 "ssh 192.168.56.103"
+	tmux splitw -v -p 66
+	tmux selectp -t 2
+	tmux splitw -v -p 50
 
-	for i in `seq 0 2`
-	do
-		_sudo $i
-	done
+	_klog 0 "4.14"
+	_klog 1 "4.19"
+	_klog 2 "5.4"
+	_klog 3 "5.10"
+	_klog 4 "f2fs"
 
 	tmux setw synchronize-panes on
-	tmux move-window -t 0
 }
 
 tmux has-session -t f2fs
 if [ $? -ne 0 ]; then
-	tmux new-session -d -s f2fs -n base
+	tmux new-session -d -s f2fs -n base "nmon"
+	tmux send-keys "cmd"
 fi
 
 _base_view
-_stress_view tests 1
+_stress_view xfstests 1
+_stress_view mon 2
+_stress_view quota 3
+_dmesg_view dmesg 4
 tmux attach-session -d -t f2fs
