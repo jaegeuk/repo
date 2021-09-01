@@ -165,9 +165,7 @@ if [ $? -ne 0 ]; then
 	tmux send-keys "cmd"
 fi
 
-  echo 2
 _base_view
-  echo 2
 _stress_view fsstress 1
 _stress_view mon 2
 _stress_view quota 3

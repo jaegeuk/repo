@@ -4,6 +4,7 @@ WATCH="watch -n .2 cat /sys/kernel/debug/f2fs/status"
 KER="tail -f /var/log/kern.log"
 SUDO="sudo su"
 DSTAT="clear && sudo dstat -cmd"
+TMUX="/tmp/tmux.log"
 
 _get_shell()
 {
@@ -12,7 +13,8 @@ _get_shell()
 
 _base_view()
 {
-	tmux list-window | grep "0: base"
+	tmux list-window > $TMUX
+        cat $TMUX | grep "0: base"
 	if [ $? -eq 0 ]; then
 		return
 	fi
@@ -101,7 +103,8 @@ _servers_4()
 _stress_view()
 {
 	echo $2
-	tmux list-window | grep "$2: $1"
+	tmux list-window > $TMUX
+	cat $TMUX | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
