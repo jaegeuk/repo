@@ -29,6 +29,7 @@ case $1 in
 5.4) _start 5.4 9225 &;;
 f2fs) _start f2fs 9226 &;;
 5.10) _start 5.10 9227 &;;
+5.15) _start 5.15 9228 &;;
 file) _start_fsstress file 9222 &;;
 dir) _start_fsstress dir 9223 &;;
 whole) _start_fsstress whole 9224 &;;

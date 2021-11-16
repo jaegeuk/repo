@@ -13,6 +13,8 @@ case $1 in
 5.4) _install 5.4 9225 &;;
 f2fs) _install f2fs 9226 &;;
 5.10) _install 5.10 9227 &;;
+5.15) _install 5.15 9228 &;;
+
 file) _install file 9222 &;;
 dir) _install dir 9223 &;;
 whole) _install whole 9224 &;;
