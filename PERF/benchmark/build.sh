@@ -31,24 +31,29 @@ mmc)
 #	cd $KERNEL
 #	make headers_install INSTALL_HDR_PATH=$KERNEL_HEADERS
 	cd $ROOT/mmc-utils
+	make clean
 	make && cp mmc $ROOT/bin/
 	;;
 fs_mark)
 	cd fs_mark-3.3
+	make clean
 	make && cp fs_mark $ROOT/bin/
 	;;
 postmark)
 	cd postmark
+	make clean
 	make && cp postmark $ROOT/bin/
 	;;
 tiotest)
 	cd tiobench-0.3.3
+	make clean
 	make && cp tiotest $ROOT/bin/
 	;;
 fsstress)
 #	cd $KERNEL
 #	make headers_install INSTALL_HDR_PATH=$KERNEL_HEADERS
 	cd $ROOT/fsstress
+	make clean
 	make && cp fsstress $ROOT/bin/
 	;;
 mobibench)
