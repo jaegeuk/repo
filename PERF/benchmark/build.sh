@@ -20,7 +20,7 @@ ROOT=$PWD
 
 case "$1" in
 iozone)
-	cd iozone3_427
+	cd iozone3_493
 	make linux-arm && cp iozone $ROOT/bin/
 	;;
 mmc)
