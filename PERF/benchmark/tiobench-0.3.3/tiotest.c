@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-inline void checkIntZero(int value, char *mess)
+void checkIntZero(int value, char *mess)
 {
 	if (value <= 0) 
 	{
@@ -97,7 +97,7 @@ inline void checkIntZero(int value, char *mess)
 	}
 }
 
-inline void checkLong(long value, char *mess)
+void checkLong(long value, char *mess)
 {
 	if (value < 0) 
 	{
@@ -1349,7 +1349,7 @@ unsigned int get_random_seed()
 	return seed;
 }
 
-inline const toff_t get_random_offset(const toff_t max, unsigned int *seed)
+const toff_t get_random_offset(const toff_t max, unsigned int *seed)
 {
 #if (RAND_MAX < 2147483647)
 	unsigned long rr_max = RAND_MAX;

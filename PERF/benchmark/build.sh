@@ -1,7 +1,8 @@
 #!/bin/sh
 
 #export TOOL_PREFIX=/opt/gcc-arm-none-eabi-4_9-2015q3/bin/arm-none-eabi
-export TOOL_PREFIX=arm-linux-gnueabi
+echo "sudo apt-get -y install gcc-aarch64-linux-gnu"
+export TOOL_PREFIX=aarch64-linux-gnu
 export CXX=$TOOL_PREFIX-g++
 export AR=$TOOL_PREFIX-ar
 export RANLIB=$TOOL_PREFIX-ranlib

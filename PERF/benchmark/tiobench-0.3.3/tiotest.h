@@ -210,7 +210,7 @@ const double timer_systime(const Timings *t);
 clock_t get_time();
 unsigned int get_random_seed();
 
-inline const toff_t get_random_offset(const toff_t filesize, unsigned int *seed);
+const toff_t get_random_offset(const toff_t filesize, unsigned int *seed);
 
 void    parse_args( ArgumentOptions* args, int argc, char *argv[] );
 
