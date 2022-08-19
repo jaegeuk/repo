@@ -20,8 +20,11 @@ ROOT=$PWD
 
 case "$1" in
 iozone)
-	cd iozone3_493
-	make linux-arm && cp iozone $ROOT/bin/
+	[ ! -d ~/android-master ] && echo "Need ~/android-master" && exit
+	cp -rf iozone3_493 ~/android-master/external/
+	cd ~/android-master && source build/envsetup.sh && lunch aosp_arm64-eng
+	cd external/iozone3_493/ && mm
+	cp ~/android-master/out/target/product/generic_arm64/system/bin/iozone $ROOT/bin/
 	;;
 mmc)
 #	cd $KERNEL
