@@ -74,7 +74,7 @@ Versions:
 #else
 extern char *getwd();
 
-#define GETWD(x) getwd(x)
+#define GETWD(x)
 #define MKDIR(x) mkdir(x,0700)
 #define SEPARATOR "/"
 #endif
