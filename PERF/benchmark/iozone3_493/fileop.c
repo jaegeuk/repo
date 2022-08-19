@@ -124,11 +124,10 @@ void file_unlink(int);
 void file_read(int);
 void splash(void);
 void usage(void);
-void bzero();
 void clear_stats();
 int validate(char *, int , char );
 
-#define THISVERSION "        $Revision: 1.61 $"
+#define THISVERSION "        $Revision: 1.63 $"
 /*#define NULL 0*/
 
 char version[]=THISVERSION;
@@ -1367,7 +1366,7 @@ clear_stats()
 {
 	int i;
 	for(i=0;i<_NUM_STATS;i++)
-		bzero((char *)&stats[i],sizeof(struct stat_struct));
+		memset((char *)&stats[i],0,sizeof(struct stat_struct));
 }
 int
 validate(char *buffer, int size, char value)

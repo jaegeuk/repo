@@ -7,7 +7,7 @@
 /************************************************************************/
 /*      Enhancements by:						*/
 /*	 	Don Capps (capps@iozone.org)				*/
-/* 		7417 Crenshaw						*/
+/* 		7417 Crenshaw Dr.					*/
 /* 		Plano, TX 75025						*/
 /*  									*/
 /************************************************************************/
@@ -60,7 +60,11 @@
 
 
 /* The version number */
-#define THISVERSION "        Version $Revision: 3.427 $"
+#define THISVERSION "        Version $Revision: 3.493 $"
+
+#if defined(Windows)
+#define NO_THREADS
+#endif
 
 #if defined(linux)
   #define _GNU_SOURCE
@@ -70,7 +74,7 @@
 #include <windows.h>
 #include <errno.h>
 #else
-#if defined(linux) || defined(solaris) || defined(IOZ_macosx) || defined(__AIX__) || defined(FreeBSD) || defined(_HPUX_SOURCE) || defined(__OpenBSD__) || defined(__DragonFly__)
+#if defined(linux) || defined(solaris) || defined(IOZ_macosx) || defined(__AIX__) || defined(__FreeBSD__) || defined(_HPUX_SOURCE) || defined(__OpenBSD__) || defined(__DragonFly__) || defined(__NetBSD__)
 #include <errno.h>
 #else
 extern  int errno;   /* imported for errors */
@@ -78,6 +82,9 @@ extern  int h_errno; /* imported for errors */
 #endif
 #endif
 
+#ifdef NO_FORK
+#define fork no_fork
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -92,6 +99,13 @@ extern  int h_errno; /* imported for errors */
 #include <pthread.h>
 #endif
 
+#ifdef ANDROID
+
+#include <sys/syscall.h>
+#define pthread_setaffinity_np(pid, size, cpuset) \
+   syscall(__NR_sched_setaffinity, (pid_t)pid, (size_t)size, (void *)cpuset)
+#endif
+
 #if defined(HAVE_ANSIC_C) && defined(linux)
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -104,7 +118,6 @@ int atoi();
 int close();
 int unlink();
 int main();
-void record_command_line();
 #if !defined(linux)
 int wait();
 #endif
@@ -112,14 +125,6 @@ int fsync();
 void srand48();
 long lrand48();
 void create_list();
-void Poll();
-void print_header();
-void Kill();
-long long l_min();
-long long l_max();
-long long mythread_create();
-int gen_new_buf();
-void touch_dedup();
 void init_by_array64(unsigned long long *, unsigned long long );
 unsigned long long genrand64_int64(void);
 #endif
@@ -138,7 +143,8 @@ char *help[] = {
 "                  [-Y read_telemetry_filename] [-y minrecsize_kB] [-q maxrecsize_kB]",
 "                  [-+u] [-+m cluster_filename] [-+d] [-+x multiplier] [-+p # ]",
 "                  [-+r] [-+t] [-+X] [-+Z] [-+w percent dedupable] [-+y percent_interior_dedup]",
-"                  [-+C percent_dedup_within]",
+"                  [-+C percent_dedup_within] [-+a zero_pct]  [-+Q dedup granule size]",
+"                  [-+M dedup+compress flag ]",
 " ",
 "           -a  Auto mode",
 "           -A  Auto2 mode",
@@ -201,6 +207,7 @@ char *help[] = {
 "           -Y filename  Read  telemetry file. Contains lines with (offset reclen compute_time) in ascii",
 "           -z  Used in conjunction with -a to test all possible record sizes",
 "           -Z  Enable mixing of mmap I/O and file I/O",
+"           -+b Skip read -- orig: #,#  burst size (KB),sleep between burst (mili-second)",
 "           -+E Use existing non-Iozone file for read-only testing",
 "           -+F Truncate file before write in thread_mix_test",
 "           -+J Include think time (-j #) in throughput calculation",
@@ -243,9 +250,13 @@ char *help[] = {
 "           -+w ## Percent of dedup-able data in buffers.",
 "           -+y ## Percent of dedup-able within & across files in buffers.",
 "           -+C ## Percent of dedup-able within & not across files in buffers.",
+"           -+a fsync rate -- orig: ## Percent of data that is compressible.",
+"           -+Q ## Dedup granule size.",
 "           -+H Hostname    Hostname of the PIT server.",
 "           -+P Service     Service  of the PIT server.",
 "           -+z Enable latency histogram logging.",
+"           -+M Enable Dedup+compress option. (Experimental).",
+"           -+R enable iozone to take filenames from a file.",
 "" };
 
 char *head1[] = {
@@ -284,13 +295,20 @@ THISVERSION,
 #include <sys/mman.h>
 #include <stdio.h>
 #include <signal.h>
+
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+  #ifndef my_sig_t
+  typedef void (*my_sig_t)(int);
+  #endif
+#endif
+
 #include <unistd.h>
 
 #include <fcntl.h>
 #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__APPLE__) && !defined(__DragonFly__)
 #include <malloc.h>
 #endif
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__)
 #include <stdlib.h>
 #include <string.h>
 #endif
@@ -301,11 +319,7 @@ THISVERSION,
 #endif
 #endif
 
-#ifndef O_RSYNC
-#define O_RSYNC O_DSYNC
-#endif
-
-#if defined (__FreeBSD__) || defined(__DSragonFly__)
+#if defined (__FreeBSD__) || defined(__DragonFly__)
 #ifndef O_RSYNC
 #define O_RSYNC O_FSYNC
 #endif
@@ -321,7 +335,9 @@ THISVERSION,
  */
 #include <strings.h>
 #include <stdlib.h>
+#ifndef NO_SOCKET
 #include <sys/socket.h>
+#endif
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -349,12 +365,18 @@ THISVERSION,
 typedef long long off64_t;
 #endif
 
+#if defined(__FreeBSD__)
+#define __off64_t_defined
+typedef off_t off64_t;
+#endif
+
 #if defined(__DragonFly__)
 #define __off64_t_defined
 typedef off_t off64_t;
 #endif
 
 
+#ifndef ANDROID
 #ifndef solaris
 #ifndef off64_t
 #ifndef _OFF64_T
@@ -363,7 +385,10 @@ typedef off_t off64_t;
 #ifndef SCO_Unixware_gcc
 #ifndef UWIN
 #ifndef __DragonFly__
+#ifndef __FreeBSD__
 typedef long long off64_t;
+#endif
+#endif
 #endif
 #endif
 #endif
@@ -456,6 +481,23 @@ struct iovec piov[PVECMAX];
 #endif
 
 #define DEDUPSEED 0x2719362
+#define MAX_RAND 2147483647L
+
+#ifdef NO_SOCKET
+#define socket no_socket
+int no_socket(int, int, int);
+#define accept no_accept
+int no_accept(int , struct sockaddr *, socklen_t *);
+#define bind no_bind
+int   no_bind(int, const struct sockaddr *,  socklen_t);
+#define connect no_connect
+int no_connect(int,  const struct sockaddr *, socklen_t);
+#endif
+
+#ifdef NO_SIGNAL
+#define kill no_kill
+int no_kill(pid_t, int );
+#endif
 
 
 /*
@@ -523,7 +565,13 @@ struct client_command {
 	int c_sverify;
 	int c_odsync;
 	int c_diag_v;
+	int c_zero_pct;
+	int c_N_special;
+	int c_dedup_granule_size;
 	int c_dedup;
+	int c_dedup_flag;
+	int c_dedup_iflag;
+	int c_dedup_bflag;
 	int c_dedup_interior;
 	int c_dedup_compress;
 	int c_dedup_mseed;
@@ -626,7 +674,13 @@ struct client_neutral_command {
 	char c_sverify[2];
 	char c_odsync[2];
 	char c_diag_v[2];
+	char c_zero_pct[4];
+	char c_N_special[4];
+	char c_dedup_granule_size[8];
 	char c_dedup[4];
+	char c_dedup_flag[4];
+	char c_dedup_iflag[4];
+	char c_dedup_bflag[4];
 	char c_dedup_interior[4];
 	char c_dedup_compress[4];
 	char c_dedup_mseed[4];
@@ -762,8 +816,8 @@ struct master_neutral_command {
 /* These are the defaults for the processor. They can be 
  * over written by the command line options.
  */
-#define CACHE_LINE_SIZE 32
-#define CACHE_SIZE ( 1024 * 1024 )
+#define MY_CACHE_LINE_SIZE 32
+#define MY_CACHE_SIZE ( 1024 * 1024 )
 
 
 #define MEG (1024 * 1024)
@@ -825,7 +879,7 @@ struct master_neutral_command {
 #endif
 
 /* Maximum number of children. Threads/procs/clients */
-#define	MAXSTREAMS	256		
+#define	MAXSTREAMS	1024		
 
 /* Minimum buffer size */
 #define MINBUFFERSIZE 128
@@ -855,18 +909,18 @@ struct master_neutral_command {
 #ifdef HAVE_PREAD
 #include <sys/times.h>
 #if defined(HAVE_PREAD) && defined(HAVE_PREADV)
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s%8s%9s%8s%10s%10s%10s%9s%9s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s%8s%9s%8s%10s%10s%10s%9s%9s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #else
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s%8s%9s%8s%10s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s%8s%9s%8s%10s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #endif
 #else
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #endif
 #endif
 
@@ -874,18 +928,18 @@ struct master_neutral_command {
 #ifdef HAVE_PREAD
 #include <sys/times.h>
 #if defined(HAVE_PREAD) && defined(HAVE_PREADV)
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s%8s%9s%8s%10s%10s%10s%9s%9s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s%8s%9s%8s%10s%10s%10s%9s%9s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #else
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s%8s%9s%8s%10s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s%8s%9s%8s%10s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #endif
 #else
-#define CONTROL_STRING2 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING3 "%16s%8s%8s%8s%8s%10s%8s%9s%8s %9s %8s%9s%9s%8s%9s\n"
-#define CONTROL_STRING4 "%16s%8s%8s%8s%8s%10s\n"
+#define CONTROL_STRING2 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%8s%9s\n"
+#define CONTROL_STRING3 "%16s%8s%9s%9s%8s%10s%8s %9s%9s %9s %9s%9s%9s%9s%9s\n"
+#define CONTROL_STRING4 "%16s%8s%9s%9s%8s%10s\n"
 #endif
 #endif
 
@@ -963,41 +1017,151 @@ struct master_neutral_command {
 /*    FUNCTION DECLARATIONS					  */
 /*								  */
 /******************************************************************/
-char *initfile();
 /*int pit_gettimeofday( struct timeval *, struct timezone *, char *, char *);*/
-int pit_gettimeofday( );
 static int openSckt( const char *, const char *, unsigned int );
 static void pit( int, struct timeval *);
-void mmap_end();
-void alloc_pbuf();
 void auto_test();		/* perform automatic test series  */
-void show_help();		/* show development help          */
 static double time_so_far();	/* time since start of program    */
-#ifdef unix
-static double utime_so_far();	/* user time 			  */
-static double stime_so_far();	/* system time   		  */
-static double clk_tck();	/* Get clocks/tick		  */
-static double cputime_so_far();
-#else
-#define cputime_so_far()	time_so_far()
+static void update_burst_sleep(int, long long, double *);
+#ifndef NO_THREADS
+static void count_burst(double* burst_acc_time_sec, long long stream_id);
 #endif
-static double time_so_far1();	/* time since start of program    */
-void get_resolution();
-void get_rusage_resolution();
-void signal_handler();		/* clean up if user interrupts us */
-void begin();			/* The main worker in the app     */
-void fetchit();			/* Prime on chip cache		  */
-void purgeit();			/* Purge on chip cache		  */
-void throughput_test();		/* Multi process throughput 	  */
-void multi_throughput_test();	/* Multi process throughput 	  */
-void prepage();			/* Pre-fault user buffer	  */
-void get_date();
-int get_pattern();		/* Set pattern based on version   */
+
 #ifdef HAVE_ANSIC_C
 float do_compute(float);	/* compute cycle simulation       */
+void begin(off64_t,long long);
+void record_command_line(int, char **);
+void show_help(void);		/* show development help          */
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+my_sig_t signal_handler(void);	/* clean up if user interrupts us */
 #else
-float do_compute();		/* compute cycle simulation       */
+sighandler_t signal_handler(void);	/* clean up if user interrupts us */
 #endif
+void auto_test(void);
+void throughput_test(void);
+static double time_so_far(void);
+void fetchit(char *,long long);
+long long verify_buffer(volatile char *,long long, off64_t, long long, unsigned long long, char );
+void purgeit(char *,long long);
+void prepage(char *,long long);
+void write_perf_test(off64_t, long long, long long *,long long *);
+void fwrite_perf_test(off64_t, long long, long long *,long long *);
+void fread_perf_test(off64_t, long long, long long *, long long *);
+void read_perf_test(off64_t,long long,long long *,long long *);
+void mix_perf_test(off64_t,long long,long long *,long long *);
+void random_perf_test(off64_t,long long, long long *,long long *);
+void reverse_perf_test(off64_t,long long,long long *,long long *);
+void rewriterec_perf_test(off64_t ,long long,long long *,long long *);
+void read_stride_perf_test(off64_t,long long,long long *,long long *);
+#ifdef HAVE_PREAD
+void pread_perf_test(off64_t,long long ,long long *,long long *);
+void pwrite_perf_test(off64_t ,long long ,long long *,long long *);
+#endif /* HAVE_PREAD */
+#ifdef HAVE_PREADV
+void preadv_perf_test(off64_t ,long long ,long long *,long long *);
+void pwritev_perf_test(off64_t ,long long ,long long *,long long *);
+#endif /* HAVE_PREADV */
+void store_dvalue(double);
+void print_header(void);
+void dump_excel(void);
+void dump_throughput(void);
+int sp_start_child_send(char *, int , struct in_addr *);
+int sp_start_master_listen(int , int );
+void dump_report(long long);
+void dump_times(long long);
+void Poll(long long);
+long long l_max(long long,long long);
+void Kill(long long,long long);
+long long l_min(long long,long long);
+void multi_throughput_test(long long,long long);
+long long mythread_create( void *(*func)(void *),int);
+int thread_exit(void);
+void get_resolution(void);
+#ifndef NO_THREADS
+pthread_t mythread_self(void);
+#endif
+void dump_throughput_cpu(void);
+char * initfile(int , off64_t ,int ,int );
+void mmap_end( char *, long long);
+void my_nap( int );
+void my_unap( unsigned long long );
+void get_rusage_resolution(void);
+static double time_so_far1(void);
+#ifdef unix
+static double clk_tck(void);	  /* Get the clocks per tick for times */
+static double utime_so_far(void); /* Return user time in ticks as double */
+static double stime_so_far(void); /* Return system time in ticks as double */
+static double cputime_so_far(void); /* Return CPU time in seconds as double */
+#else
+#define cputime_so_far(void)	time_so_far(void)
+#endif
+int start_master_listen(void);
+void master_listen(int , int );
+void child_send(char *, struct master_command *, int );
+void master_send(int , char *, struct client_command *, int );
+void stop_child_listen(int);
+void O_stop_child_send(int);
+void stop_master_listen(int);
+void stop_master_send(int);
+int start_child_listen(int);
+int start_child_listen_async(int);
+void start_child_listen_loop(void);
+int child_attach(int, int);
+void child_listen(int, int);
+void child_listen_async(int, int);
+int start_master_send(char *, int, struct in_addr *);
+int start_master_send_async(char *, int , struct in_addr );
+long long start_child_proc(int ,long long , long long );
+int pick_client(int,long long, long long);
+void become_client(void);
+void tell_master_stats(int, long long, double, double, float, double, char, long long);
+void stop_master_listen_loop(void);
+void tell_master_ready(long long);
+void wait_for_master_go(long long);
+void start_master_listen_loop(int);
+void tell_children_begin(long long);
+void wait_dist_join(void);
+int parse_client_line(char *,int);
+void child_remove_files(int);
+void terminate_child_async(void);
+void distribute_stop(void);
+void send_stop(void);
+void cleanup_children(void);
+void cleanup_comm(void);
+int sp_start_master_send(char *, int , struct in_addr *);
+int sp_start_child_listen(int, int);
+void get_date(char *);
+int get_pattern(void);
+void alloc_pbuf(void);
+int check_filename(char *);
+int gen_new_buf(char *, char *, long, int, int, int, int, int );
+int special_gen_new_buf(char *, char *, long, int, int, int, int, int );
+void touch_dedup(char *, int );
+void init_genrand64(unsigned long long);
+long long genrand64_int63(void);
+double genrand64_real1(void);
+double genrand64_real2(void);
+double genrand64_real3(void);
+int pit_gettimeofday( struct timeval *, struct timezone *, char *, char *);
+
+#else  /* NON ANSI C */
+
+float do_compute();		/* compute cycle simulation       */
+void begin();
+void record_command_line();
+void show_help();
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+my_sig_t signal_handler(); /* clean up if user interrupts us */
+#else
+sighandler_t signal_handler(); /* clean up if user interrupts us */
+#endif
+void auto_test();
+void throughput_test();
+static double time_so_far();
+void fetchit();			/* Prime on chip cache		  */
+long long verify_buffer();
+void purgeit();			/* Purge on chip cache		  */
+void prepage();			/* Pre-fault user buffer	  */
 void write_perf_test();		/* write/rewrite test		  */
 void fwrite_perf_test();	/* fwrite/refwrite test		  */
 void fread_perf_test();		/* fread/refread test		  */
@@ -1016,10 +1180,90 @@ void preadv_perf_test();	/* preadv/re-preadv test	  */
 void pwritev_perf_test();	/* pwritev/re-pwritev test	  */
 #endif /* HAVE_PREADV */
 void store_dvalue();		/* Store doubles array 		  */
+void print_header();
 void dump_excel();
 void dump_throughput();
 int sp_start_child_send();
 int sp_start_master_listen();
+void dump_report();
+void dump_times();
+void Poll();
+long long l_max();
+void Kill();
+long long l_min();
+void multi_throughput_test();	/* Multi process throughput 	  */
+long long mythread_create();
+int thread_exit();
+#ifndef NO_THREADS
+pthread_t mythread_self();
+#endif
+void dump_throughput_cpu();
+char * initfile();
+void mmap_end();
+void my_nap();
+void my_unap();
+void get_resolution();
+void get_rusage_resolution();
+static double time_so_far1();	/* time since start of program    */
+#ifdef unix
+static double clk_tck();	/* Get clocks/tick		  */
+static double utime_so_far();	/* user time 			  */
+static double stime_so_far();	/* system time   		  */
+static double cputime_so_far();
+#else
+#define cputime_so_far()	time_so_far()
+#endif
+int start_master_listen();
+void master_listen();
+void child_send();
+void master_send();
+void stop_child_listen();
+void O_stop_child_send();
+void stop_master_listen();
+void stop_master_send();
+int start_child_listen();
+int start_child_listen_async();
+void start_child_listen_loop();
+int child_attach();
+void child_listen();
+void child_listen_async();
+int start_master_send();
+int start_master_send_async();
+long long start_child_proc();
+int pick_client();
+void become_client();
+void tell_master_stats();
+void stop_master_listen_loop();
+void tell_master_ready();
+void wait_for_master_go();
+void start_master_listen_loop();
+void tell_children_begin();
+void wait_dist_join();
+int parse_client_line();
+void child_remove_files();
+void terminate_child_async();
+void distribute_stop();
+void send_stop();
+void cleanup_children();
+void cleanup_comm(void);
+int sp_start_master_send(char *, int , struct in_addr *);
+int sp_start_child_listen(int, int);
+void get_date();
+int get_pattern();
+void alloc_pbuf();
+int check_filename();
+int gen_new_buf();
+int special_gen_new_buf();
+void touch_dedup();
+void init_genrand64();
+long long genrand64_int63();
+double genrand64_real1();
+double genrand64_real2();
+double genrand64_real3();
+int pit_gettimeofday();
+
+#endif /* End of HAVE ANSI C */
+
 #ifdef HAVE_ANSIC_C
 #if defined (HAVE_PREAD) && defined(_LARGEFILE64_SOURCE)
 ssize_t pwrite64(); 
@@ -1030,9 +1274,6 @@ char *getenv();
 char *inet_ntoa();
 int system();
 #endif
-void my_nap();
-void my_unap();
-int thread_exit();
 #ifdef ASYNC_IO
 size_t async_write();
 void async_release();
@@ -1042,6 +1283,8 @@ size_t async_write_no_copy();
 void end_async();
 void async_init();
 #else
+int async_read();
+int async_read_no_copy();
 size_t async_write();
 size_t async_write_no_copy();
 void async_release();
@@ -1070,24 +1313,24 @@ static double cpu_util(double, double);
 void dump_cputimes(void);
 void purge_buffer_cache(void);
 char *alloc_mem(long long,int);
-void *(thread_rwrite_test)(void *);
-void *(thread_write_test)(void *);
-void *(thread_fwrite_test)(void *);
-void *(thread_fread_test)(void *);
-void *(thread_read_test)(void*);
+void *(thread_rwrite_test)(int);
+void *(thread_write_test)(int);
+void *(thread_fwrite_test)(int);
+void *(thread_fread_test)(int);
+void *(thread_read_test)(int);
 #ifdef HAVE_PREAD
-void *(thread_pread_test)(void*);
-void *(thread_pwrite_test)(void*);
+void *(thread_pread_test)(int);
+void *(thread_pwrite_test)(int);
 #endif
-void *(thread_cleanup_test)(void*);
-void *(thread_cleanup_quick)(void*);
-void *(thread_ranread_test)(void *);
-void *(thread_mix_test)(void *);
-void *(thread_ranwrite_test)(void *);
-void *(thread_rread_test)(void *);
-void *(thread_reverse_read_test)(void *);
-void *(thread_stride_read_test)(void *);
-void *(thread_set_base)(void *);
+void *(thread_cleanup_test)(int);
+void *(thread_cleanup_quick)(int);
+void *(thread_ranread_test)(int);
+void *(thread_mix_test)(int);
+void *(thread_ranwrite_test)(int);
+void *(thread_rread_test)(int);
+void *(thread_reverse_read_test)(int);
+void *(thread_stride_read_test)(int);
+void *(thread_set_base)(int);
 void *(thread_join)(long long, void *);
 void disrupt(int);
 #if defined(Windows)
@@ -1118,9 +1361,6 @@ char *getenv();
 char *inet_ntoa();
 int system();
 #endif
-void my_nap();
-void my_unap();
-int thread_exit();
 void close_xls();
 void do_label();
 int create_xls();
@@ -1240,22 +1480,28 @@ char *test_output[] = {"                ",
 		      "                   ",
 		      "                   \n" };
 */
-char *test_output[] = {"                ",
+
+#ifdef FOOBAR
+                                                 random    random     bkwd    record    stride                                    
+               write  rewrite    read    reread    read     write     read   rewrite      read   fwrite frewrite    fread  freread  pwv prwv  prv prrv
+#endif
+char *test_output[] ={"                  ",  
+		      "                  ",  
+		      "                  ",  
+		      "         ",
+		      "          ",
+		      "          ",
 		      "                  ",
-		      "                ",
-		      "        ",
-		      "        ",
-		      "        ",
-		      "                  ",
-		      "                ",
-		      "",
 		      "                 ",
-		      "                   ",
-		      "                   ",
-		      "                   ",
-		      "                   ",
-		      "                   ",
-		      "                   \n" };
+		      "",
+		      "                  ",
+		      "                  ",
+		      "                  ",
+		      "                  ",
+
+		      "                  ",
+		      "                  ",
+		      "                 \n" };
 long long test_soutput[] = {2,2,2,1,1,1,2,2,2,2,2,2,2,2};
 
 
@@ -1295,7 +1541,9 @@ int t_count = 0;
 int r_count,s_count;
 char *barray[MAXSTREAMS];
 char *haveshm;
+#if !defined(Windows)
 extern int optind;
+#endif
 long long onetime, auto_mode, sfd, multi_buffer;
 int exit_code = 0;  
 int fd;
@@ -1313,7 +1561,12 @@ int hist_summary;
 int op_rate;
 int op_rate_flag;
 char aflag, Eflag, hflag, Rflag, rflag, sflag,del_flag,mix_test;
-char diag_v,sent_stop,dedup,dedup_interior,dedup_compress;
+char diag_v,sent_stop,dedup,dedup_interior,dedup_compress, dedup_flag, dedup_iflag,dedup_bflag;
+int zero_pct = -1;
+int N_special = 0;
+int W_special = 0;
+int dedup_granule_size = 4096;
+int dedup_unit_step = 1024;
 char *dedup_ibuf;
 char *dedup_temp;
 char bif_flag;
@@ -1343,7 +1596,7 @@ struct runtime runtimes [MAX_X] [MAX_Y];	/* in parallel with report_array[][] */
 long long include_test[50];
 long long include_mask;
 char RWONLYflag, NOCROSSflag;		/*auto mode 2 - kcollins 8-21-96*/
-char mfflag;
+char mfflag,F_flag;
 long long status, x, y, childids[MAXSTREAMS+1], myid, num_child;
 int pct_read,speed_code;
 #ifndef NO_THREADS
@@ -1353,7 +1606,9 @@ off64_t next64;
 char wol_opened, rol_opened;
 FILE *wqfd,*rwqfd,*rqfd,*rrqfd;
 
+#if !defined(Windows)
 extern char *optarg;
+#endif
 #ifndef __AIX__
 long long ret;
 #else
@@ -1368,12 +1623,23 @@ struct size_entry *rec_size_list=0;
 off64_t maximum_file_size;
 off64_t minimum_file_size;
 
+off64_t burst_size_kb_64 = -1;             /* the size of the burst (in KBytes) */
+long long burst_sleep_duration_msec = -1;  /* the sleep duration between burst */
+long long written_this_burst = 0;          /* How much data was writen so far in this burst*/
+#ifndef NO_THREADS
+pthread_barrierattr_t barrier_attr;
+pthread_barrier_t *barrier;
+off64_t burst_size_per_child = 0;
+long long burst_written_so_far[MAXSTREAMS] = {0};  /* How much data was written so far in this burst per stream (thread/process)*/
+#endif
+
 char bif_filename [MAXNAMESIZE];           /* name of biff file      */
 char filename [MAXNAMESIZE];               /* name of temporary file */
 char mountname [MAXNAMESIZE];              /* name of device         */
 char dummyfile [MAXSTREAMS][MAXNAMESIZE];  /* name of dummy file     */
 char dummyfile1 [MAXNAMESIZE];             /* name of dummy file     */
 char *filearray[MAXSTREAMS];		   /* array of file names    */
+int blkidx[MAXSTREAMS];            /* array of file names    */
 char tfile[MAXNAMESIZE];
 char *buffer,*buffer1, *mbuffer,*mainbuffer;
 FILE *pi,*r_traj_fd,*w_traj_fd;
@@ -1384,8 +1650,8 @@ char Cflag;
 char use_thread = 0;
 long long debug1=0;		
 long long debug=0;
-unsigned long cache_size=CACHE_SIZE;
-unsigned long cache_line_size=CACHE_LINE_SIZE;
+unsigned long cache_size=(long long)MY_CACHE_SIZE;
+unsigned long cache_line_size=(long long)MY_CACHE_LINE_SIZE;
 long long *pstatus;
 off64_t min_file_size = KILOBYTES_START;
 off64_t max_file_size = KILOBYTES_END;
@@ -1565,50 +1831,11 @@ long long rest_val;
  * Sort of... Full prototypes break non-ansi C compilers. No protos is 
  * a bit sloppy, so the compromise is this.
  */
-void child_send();
-int start_child_listen();
-int start_child_listen_async();
-void start_child_listen_loop();
-void child_listen();
-void child_listen_async();
 void stop_child_send();
-void stop_child_listen();
-void cleanup_comm();
-void master_send();
-int start_master_send();
-int start_master_listen();
-int check_filename();
-void master_listen();
-void stop_master_send();
-void stop_master_listen();
-long long start_child_proc();
-int parse_client_line();
-void wait_dist_join();
-void tell_children_begin();
-void start_master_listen_loop();
-void wait_for_master_go();
-void tell_master_ready();
-void stop_master_listen_loop();
-void tell_master_stats();
-void become_client();
-int pick_client();
-long long start_child_proc();
-int start_master_send();
-void child_listen();
-int start_child_listen();
-void stop_master_send();
-void stop_master_listen();
 void stop_child_send();
-void stop_child_listen();
-void master_send();
 void child_send();
-void master_listen();
-int start_master_listen();
-void child_remove_files();
-void terminate_child_async();
-void distribute_stop();
-void send_stop();
-void cleanup_children();
+void compressible_rand_16_int(int *);
+void new_touch_dedup(char *, int);
 
 
 /****************************************************************/
@@ -1616,6 +1843,7 @@ void cleanup_children();
 /*   MAIN () 							*/
 /*								*/
 /****************************************************************/
+int negatives, positives;
 
 int
 main(argc,argv) 
@@ -1660,7 +1888,7 @@ char **argv;
 	mygen=rand(); /* Pick a random generation number */
 
 	/* Try to find the actual VM page size, if possible */
-#if defined (solaris) || defined (_HPUX_SOURCE) || defined (linux) || defined(IRIX) || defined (IRIX64)
+#if defined (solaris) || defined (_HPUX_SOURCE) || defined (linux) || defined(IRIX) || defined (IRIX64) || defined(__NetBSD__)
 #ifndef __convex_spp
 	page_size=getpagesize();
 #endif
@@ -1692,68 +1920,22 @@ char **argv;
     	sprintf(splash[splash_line++],"\t             Jean-Marc Zucconi, Jeff Blomberg, Benny Halevy, Dave Boone,\n");
     	sprintf(splash[splash_line++],"\t             Erik Habbinga, Kris Strecker, Walter Wong, Joshua Root,\n");
     	sprintf(splash[splash_line++],"\t             Fabrice Bacchella, Zhenghua Xue, Qin Li, Darren Sawyer,\n");
-    	sprintf(splash[splash_line++],"\t             Vangel Bojaxhi, Ben England, Vikentsi Lapa.\n\n");
+    	sprintf(splash[splash_line++],"\t             Vangel Bojaxhi, Ben England, Vikentsi Lapa,\n");
+    	sprintf(splash[splash_line++],"\t             Alexey Skidanov, Sudhir Kumar.\n\n");
 	sprintf(splash[splash_line++],"\tRun began: %s\n",ctime(&time_run));
 	argcsave=argc;
 	argvsave=argv;
 
-    	signal(SIGINT, signal_handler);	 	/* handle user interrupt */
-    	signal(SIGTERM, signal_handler);	/* handle kill from shell */
-
-        /********************************************************/
-        /* Allocate and align buffer with beginning of the 	*/
-        /* on chip data cache. 					*/
-        /********************************************************/
-
-     	buffer = (char *) alloc_mem((long long)(MAXBUFFERSIZE + (2 * cache_size)),(int)0);
-	if(buffer == 0) {
-        	perror("Memory allocation failed:");
-        	exit(1);
-        }
-
-#ifdef _64BIT_ARCH_
-     	buffer = (char *) ((long long )(buffer + cache_size ) & 
-		~(cache_size-1));
+#ifndef NO_SIGNAL
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+    	signal((int) SIGINT, (my_sig_t) signal_handler);   /* handle user interrupt */
+    	signal((int) SIGTERM, (my_sig_t) signal_handler);  /* handle kill from shell */
 #else
-     	buffer = (char *) ((long)(buffer + cache_size ) & 
-		~((long)cache_size-1));
-#endif
-	mainbuffer = buffer;
-
-	/* de-dup input buf */
-     	buffer1 = (char *) alloc_mem((long long)(MAXBUFFERSIZE + (2 * cache_size)),(int)0);
-	if(buffer1 == 0) {
-        	perror("Memory allocation failed:");
-        	exit(1);
-        }
-
-#ifdef _64BIT_ARCH_
-     	buffer1 = (char *) ((long long )(buffer1 + cache_size ) & 
-		~(cache_size-1));
-#else
-     	buffer1 = (char *) ((long)(buffer1 + cache_size ) & 
-		~((long)cache_size-1));
-#endif
-	dedup_ibuf = buffer1;
-	touch_dedup(buffer1, MAXBUFFERSIZE);
-
-#ifdef FOOB
-	/* de-dup temp buf */
-     	buffer1 = (char *) alloc_mem((long long)(MAXBUFFERSIZE + (2 * cache_size)),(int)0);
-	if(buffer1 == 0) {
-        	perror("Memory allocation failed:");
-        	exit(1);
-        }
-
-#ifdef _64BIT_ARCH_
-     	buffer1 = (char *) ((long long )(buffer1 + cache_size ) & 
-		~(cache_size-1));
-#else
-     	buffer1 = (char *) ((long)(buffer1 + cache_size ) & 
-		~((long)cache_size-1));
+    	signal((int) SIGINT, (sighandler_t) signal_handler); /* handle user interrupt */
+    	signal((int) SIGTERM, (sighandler_t) signal_handler);	/* handle kill from shell */
 #endif
 #endif
-	dedup_temp = mainbuffer;
+
 
 	fetchon++;  /* By default, prefetch the CPU cache lines associated with the buffer */
   	strcpy(filename,default_filename); 	/* Init default filename */
@@ -1823,22 +2005,26 @@ char **argv;
 			sprintf(splash[splash_line++],"\tVxFS advanced feature SET_CACHE, VX_DIRECT enabled\n");
 			break;
 #endif
-#if ! defined(DONT_HAVE_O_DIRECT)
-#if defined(linux) || defined(__AIX__) || defined(IRIX) || defined(IRIX64) || defined(Windows) || defined(__FreeBSD__) || defined(solaris)
+#if !defined(DONT_HAVE_O_DIRECT)
+  #if defined(linux) || defined(__AIX__) || defined(IRIX) || defined(IRIX64) || defined(Windows) || defined(__FreeBSD__) || defined(solaris) || defined(IOZ_macosx)
 			direct_flag++;
-			sprintf(splash[splash_line++],"\tO_DIRECT feature enabled\n");
-			break;
+#if defined __APPLE__ && __MACH__
+            		sprintf(splash[splash_line++],"\tF_NOCACHE=1 - Turns data caching off\n");
+#else
+                        sprintf(splash[splash_line++],"\tO_DIRECT feature enabled\n");
 #endif
-#if defined(TRU64)
+
+			break;
+  #endif
+  #if defined(TRU64)
 			direct_flag++;
 			sprintf(splash[splash_line++],"\tO_DIRECTIO feature enabled\n");
 			break;
-#endif
+  #endif
 #else
-			break;
-#endif
-#if defined(Windows)
+  #if defined(Windows)
 			sprintf(splash[splash_line++],"\tO_DIRECTIO feature not available in Windows version.\n");
+  #endif
 			break;
 #endif
 		case 'B':	/* Use mmap file for test file */
@@ -1902,7 +2088,7 @@ char **argv;
 #ifdef NO_PRINT_LLD
 			sscanf(optarg,"%ld",&kilobytes64);
 #else
-			sscanf(optarg,"%lld",&kilobytes64);
+			sscanf(optarg,"%lld",(long long *)&kilobytes64);
 #endif
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
@@ -1924,9 +2110,9 @@ char **argv;
 			min_file_size = (off64_t)s_range[0];   /* Make visable globally */
 
 #ifdef NO_PRINT_LLD
-	    		sprintf(splash[splash_line++],"\tFile size set to %ld kB\n",kilobytes64);
+	    		sprintf(splash[splash_line++],"\tFile size set to %ld kB\n",(long long)kilobytes64);
 #else
-	    		sprintf(splash[splash_line++],"\tFile size set to %lld kB\n",kilobytes64);
+	    		sprintf(splash[splash_line++],"\tFile size set to %lld kB\n",(long long)kilobytes64);
 #endif
 			sflag++;
 			break;
@@ -1938,7 +2124,7 @@ char **argv;
 				num_child=1;
 			}else
 				num_child=mint;
-			if(mint > (unsigned long long)MAXSTREAMS){
+			if(mint > (long long)MAXSTREAMS){
 			  printf("Invalid options: maximum streams for ");
 			  printf("throughput is MAXSTREAMS\n");
 			  exit(4);
@@ -2068,12 +2254,12 @@ char **argv;
 		case 'S':	/* Set the processor cache size */
 			cache_size = (long)(atoi(optarg)*1024);
 			if(cache_size == 0)
-				cache_size = CACHE_SIZE;
+				cache_size = MY_CACHE_SIZE;
 			break;
 		case 'L':	/* Set processor cache line size */
 			cache_line_size = (long)(atoi(optarg));
 			if(cache_line_size == 0)
-				cache_line_size = CACHE_LINE_SIZE;
+				cache_line_size = MY_CACHE_LINE_SIZE;
 			break;
 		case 'f':	/* Specify the file name */
 			if(mfflag) {
@@ -2091,6 +2277,7 @@ char **argv;
 			break;
 		case 'F':	/* Specify multiple file names for -t */
 	 		mfflag++;
+			F_flag++;
 			if(fflag) {
 			  printf("invalid options: -f and -F are mutually exclusive\n");
 			  exit(11);
@@ -2100,32 +2287,34 @@ char **argv;
 			  exit(12);
 			}
 			optind--;
-			for(fileindx=0;fileindx<maxt;fileindx++) {
-			  filearray[fileindx]=argv[optind++];
-			  if(optind > argc) {
+			for(fileindx=0;fileindx<maxt;fileindx++) 
+			{
+			         filearray[fileindx]=argv[optind++];
+			         if(optind > argc) 
+				 {
 #ifdef NO_PRINT_LLD
-			    printf("invalid options: not enough filenames for %ld streams\n",num_child);
+			             printf("invalid options: not enough filenames for %ld streams\n",num_child);
 #else
-			    printf("invalid options: not enough filenames for %lld streams\n",num_child);
+			             printf("invalid options: not enough filenames for %lld streams\n",num_child);
 #endif
-			    exit(13);
-			  }
-			}
+			             exit(13);
+			         }
+		        }
 			break;
 		case 'r':	/* Specify the record size to use */
 			rflag++;
-			reclen = ((long long)(atoi(optarg))*1024);
+			reclen = ((long long)(atoll(optarg))*1024LL);
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
-				reclen = (long long)(1024 * atoi(optarg));
+				reclen = (long long)(1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='m' ||
 				optarg[strlen(optarg)-1]=='M'){
-				reclen = (long long)(1024 * 1024 * atoi(optarg));
+				reclen = (long long)(1024LL * 1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='g' ||
 				optarg[strlen(optarg)-1]=='G'){
-				reclen = (long long)(1024 * 1024 * 1024 *(long long)atoi(optarg));
+				reclen = (long long)(1024LL * 1024LL * 1024LL *(long long)atoll(optarg));
 			}
 			if(reclen <= 0)
 				reclen=(long long)4096;
@@ -2188,6 +2377,14 @@ char **argv;
 				printf("Can not run throughput tests with unmount & remounts.\n");
 				exit(15);
 			}
+
+#ifdef NO_THREADS
+			if(burst_size_kb_64 != -1 && burst_sleep_duration_msec != -1)
+			{
+				printf("Can not run throughput tests with burst option.\n");
+				exit(100);
+			}
+#endif
 			break;
 		case 'd':	/* Specify the delay of children to run */
 			delay_start = (long long)(atoi(optarg));
@@ -2204,7 +2401,7 @@ char **argv;
 				exit(183);
 			}
 #endif
-			if(tval > sizeof(func)/sizeof(char *)) 
+			if(tval > (long long)(sizeof(func)/sizeof(char *))) 
 			{
 				tval=0;
 				sprintf(splash[splash_line++],"\tSelected test not available on the version.\n");
@@ -2229,7 +2426,7 @@ char **argv;
 			}
 			break;
 		case 'w':	/* Do not unlink files */
-			//sprintf(splash[splash_line++],"\tSetting no_unlink\n");
+			sprintf(splash[splash_line++],"\tSetting no_unlink\n");
 			no_unlink = 1;
 			break;
 		case 'Z':	/* Turn on the mmap and file I/O mixing */
@@ -2272,50 +2469,50 @@ char **argv;
 			break;
 		case 'n':	/* Set min file size for auto mode */
 			nflag=1;
-			minimum_file_size = (off64_t)atoi(optarg);
+			minimum_file_size = (off64_t)atoll(optarg);
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
 				;
 			}
 			if(optarg[strlen(optarg)-1]=='m' ||
 				optarg[strlen(optarg)-1]=='M'){
-				minimum_file_size = (long long)(1024 * atoi(optarg));
+				minimum_file_size = (long long)(1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='g' ||
 				optarg[strlen(optarg)-1]=='G'){
-				minimum_file_size = (long long)(1024 * 1024 * (long long)atoi(optarg));
+				minimum_file_size = (long long)(1024LL * 1024LL * (long long)atoll(optarg));
 			}
 			if(minimum_file_size < RECLEN_START/1024)
 				minimum_file_size=(off64_t)(RECLEN_START/1024);
 			if(minimum_file_size < page_size/1024)
 				minimum_file_size=(off64_t)(page_size/1024);
 #ifdef NO_PRINT_LLD
-			sprintf(splash[splash_line++],"\tUsing minimum file size of %ld kilobytes.\n",minimum_file_size);
+			sprintf(splash[splash_line++],"\tUsing minimum file size of %ld kilobytes.\n",(long long)minimum_file_size);
 #else
-			sprintf(splash[splash_line++],"\tUsing minimum file size of %lld kilobytes.\n",minimum_file_size);
+			sprintf(splash[splash_line++],"\tUsing minimum file size of %lld kilobytes.\n",(long long)minimum_file_size);
 #endif
 			break;
 		case 'g':	/* Set maximum file size for auto mode */
 			gflag=1;
-			maximum_file_size = (off64_t)atoi(optarg);
+			maximum_file_size = (off64_t)atoll(optarg);
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
 				;
 			}
 			if(optarg[strlen(optarg)-1]=='m' ||
 				optarg[strlen(optarg)-1]=='M'){
-				maximum_file_size = (long long)(1024 * atoi(optarg));
+				maximum_file_size = (long long)(1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='g' ||
 				optarg[strlen(optarg)-1]=='G'){
-				maximum_file_size = (long long)(1024 * 1024 * (long long)atoi(optarg));
+				maximum_file_size = (long long)(1024LL * 1024LL * (long long)atoll(optarg));
 			}
-			if(maximum_file_size < RECLEN_START/1024)
-				maximum_file_size=(off64_t)(RECLEN_START/1024);
+			if(maximum_file_size < RECLEN_START/1024LL)
+				maximum_file_size=(off64_t)(RECLEN_START/1024LL);
 #ifdef NO_PRINT_LLD
-			sprintf(splash[splash_line++],"\tUsing maximum file size of %ld kilobytes.\n",maximum_file_size);
+			sprintf(splash[splash_line++],"\tUsing maximum file size of %ld kilobytes.\n",(long long)maximum_file_size);
 #else
-			sprintf(splash[splash_line++],"\tUsing maximum file size of %lld kilobytes.\n",maximum_file_size);
+			sprintf(splash[splash_line++],"\tUsing maximum file size of %lld kilobytes.\n",(long long)maximum_file_size);
 #endif
 			break;
 		case 'z':	/* Set no cross over */
@@ -2324,41 +2521,41 @@ char **argv;
 			break;
 		case 'y':		/* Set min record size for auto mode */
 			yflag=1;
-			min_rec_size = ((long long)(atoi(optarg))*1024);
+			min_rec_size = ((long long)(atoll(optarg))*1024);
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
-				min_rec_size = (long long)(1024 * atoi(optarg));
+				min_rec_size = (long long)(1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='m' ||
 				optarg[strlen(optarg)-1]=='M'){
-				min_rec_size = (long long)(1024 * 1024 * atoi(optarg));
+				min_rec_size = (long long)(1024LL * 1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='g' ||
 				optarg[strlen(optarg)-1]=='G'){
-				min_rec_size = (long long)(1024 * 1024 * 1024 *(long long)atoi(optarg));
+				min_rec_size = (long long)(1024LL * 1024LL * 1024LL *(long long)atoll(optarg));
 			}
 			if(min_rec_size <= 0)
 				min_rec_size=(long long)RECLEN_START;
 #ifdef NO_PRINT_LLD
-	    		sprintf(splash[splash_line++],"\tUsing Minimum Record Size %ld kB\n", min_rec_size/1024);
+	    		sprintf(splash[splash_line++],"\tUsing Minimum Record Size %ld kB\n", min_rec_size/1024LL);
 #else
-	    		sprintf(splash[splash_line++],"\tUsing Minimum Record Size %lld kB\n", min_rec_size/1024);
+	    		sprintf(splash[splash_line++],"\tUsing Minimum Record Size %lld kB\n", min_rec_size/1024LL);
 #endif
 			break;
 		case 'q':		/* Set max record size for auto mode */
 			qflag=1;
-			max_rec_size = ((long long)(atoi(optarg))*1024);
+			max_rec_size = ((long long)(atoll(optarg))*1024);
 			if(optarg[strlen(optarg)-1]=='k' ||
 				optarg[strlen(optarg)-1]=='K'){
-				max_rec_size = (long long)(1024 * atoi(optarg));
+				max_rec_size = (long long)(1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='m' ||
 				optarg[strlen(optarg)-1]=='M'){
-				max_rec_size = (long long)(1024 * 1024 * atoi(optarg));
+				max_rec_size = (long long)(1024LL * 1024LL * atoll(optarg));
 			}
 			if(optarg[strlen(optarg)-1]=='g' ||
 				optarg[strlen(optarg)-1]=='G'){
-				max_rec_size = (long long)(1024 * 1024 * 1024 *(long long)atoi(optarg));
+				max_rec_size = (long long)(1024LL * 1024LL * 1024LL *(long long)atoll(optarg));
 			}
 			if(max_rec_size <= 0)
 				min_rec_size=(long long)RECLEN_END;
@@ -2387,7 +2584,7 @@ char **argv;
 		 * -+b  is shown below. This is a sub option with no argument.
 		 */
 		case '+':
-			/* printf("Plus option = >%s<\n",optarg);*/
+			/* percent to make data compressible */
 			switch (*((char *)optarg))
 			{
 				case 'a':  /* Example: Has argument */
@@ -2400,12 +2597,147 @@ char **argv;
 					if (fsync_rate <= 1)
 						printf("No effect. More than 1 will conduct fsync.\n");
 					break;
+#if 0
+                                        subarg = argv[optind++];
+                                        if(subarg==(char *)0)
+                                        {
+                                             printf("-+a takes an operand !!\n");
+                                             exit(200);
+                                        }
+                                        zero_pct = atoi(subarg);
+                                        if(zero_pct >100)
+                                            zero_pct = 100;
+                                        sprintf(splash[splash_line++],"\tZero Percent %d\n ",zero_pct);
+                                        break;
+#endif
+
+				case 'Q': /* Dedup granule size */
+					subarg = argv[optind++];
+                                        if(subarg==(char *)0)
+                                        {
+                                             printf("-+Q takes an operand !!\n");
+                                             exit(200);
+                                        }
+                                        dedup_granule_size = atoi(subarg);
+                                        if(dedup_granule_size <0)
+                                                dedup_granule_size = 0;
+                                        sprintf(splash[splash_line++],"\tDedup granule size %d\n",dedup_granule_size);
+                                        dedup_unit_step = dedup_granule_size >> 2;
+                                        break;
+
 				case 'b':  /* Example: Does not have an argument */
 					noread=1;
 					break;
+#if 0
+				case 'b':  /* burst */
+#ifdef NO_THREADS
+					if(trflag)
+					{
+						printf("Can not run throughput tests with burst option.\n");
+						exit(100);
+					}
+#endif
+					subarg=argv[optind++];
+					if(subarg==(char *)0)
+					{
+						printf("-+b takes an operand !!\n");
+						exit(200);
+					}
+					if (strchr(subarg,',') == NULL)
+					{
+						printf("-+b operand is of the format #,# (burst size (K/M/G) ,mili-second) !!\n");
+						exit(400);
+					}
+					burst_sleep_duration_msec = atoi(strchr(subarg,',') + 1);
+					if (burst_sleep_duration_msec == 0) {
+						printf("-+b  cannot parse sleep duration !!\n");
+						exit(400);
+					}
+					*strchr(subarg,',') = '\0';
+					#ifdef NO_PRINT_LLD
+						sscanf(subarg,"%ld",(long long *)&burst_size_kb_64);
+					#else
+						sscanf(subarg,"%lld",(long long *)&burst_size_kb_64);
+					#endif
+					if(subarg[strlen(subarg)-1]=='k' ||
+						subarg[strlen(subarg)-1]=='K'){
+					;
+					}
+					if(subarg[strlen(subarg)-1]=='m' ||
+						subarg[strlen(subarg)-1]=='M'){
+						burst_size_kb_64 = burst_size_kb_64 * 1024;
+					}
+					if(subarg[strlen(optarg)-1]=='g' ||
+						subarg[strlen(optarg)-1]=='G'){
+						burst_size_kb_64 = burst_size_kb_64 * 1024 * 1024;
+					}
+					if (burst_size_kb_64 <= 0) {
+						printf("-+b  cannot parse burst size '%s'!!\n",subarg);
+						exit(400);
+					}
+					*(subarg + strlen(subarg)) = ','; /* so it will be printed when dumping the argsuments */
+					break;
+#endif
 				case 'F':  /* Example: Does not have an argument */
 					del_flag = 1;
 					break;
+				case 'M':  /* Speical dedup+compress option. Experimental */
+					N_special = 1;
+                                        sprintf(splash[splash_line++],"\tDedup+compress enabled\n ");
+					break;
+ 				case 'R':  /* Speical Windows option to read filelist from a input file. Experimental */
+	 				mfflag++;
+					subarg = argv[optind++];
+                                        if(subarg==(char *)0)
+                                        {
+                                             printf("-+R takes an operand !!\n");
+                                             exit(200);
+                                        }
+                                        sprintf(splash[splash_line++],"\tFilenames from a file option enabled. File: %s\n ",subarg);
+			 		/* filename should be used instead of filelist */
+                            		struct stat outbuf;
+                            		int result;
+                            		result = stat(subarg, &outbuf);
+                            		if(result == -1) {
+                                    		printf("Failed to stat the iozone input file: %s\n",argv[optind]);
+                                    		exit(errno);
+                            		} 
+			    		else 
+			    		{
+                            			/* read the input file and populate the  filearray */
+                                		int fileindx = 0;
+                                		FILE * fp;
+						char * lbuffer;
+                                		fp = fopen(subarg, "r");
+                                		while ( 1 )
+			        		{
+						    lbuffer=malloc(MAXNAMESIZE);
+						    memset(lbuffer,0,MAXNAMESIZE);
+						    if(fgets(lbuffer,MAXNAMESIZE,fp) == 0) 
+							break;
+                                    		    if(strlen(lbuffer) > 0)
+				    		    {
+							/* strip newline */
+							if(lbuffer[strlen(lbuffer)-1] == '\n')
+							    lbuffer[strlen(lbuffer)-1] = 0;	
+                                        		filearray[fileindx]= lbuffer;
+                                        		fileindx++;
+                                    		    }
+                                		}
+                                		fclose(fp);
+                                		if(fileindx > num_child) 
+						{
+#ifdef NO_PRINT_LLD
+                                    		    printf("invalid options: not enough filenames for %ld streams\n",num_child);
+#else
+                                    		    printf("invalid options: not enough filenames for %lld streams\n",num_child);
+#endif
+                                    		    exit(13);
+
+                                		}
+                            		}
+					break;
+
 				case 'c':  /* Argument is the controlling host name */
 					/* I am a client for distributed Iozone */
 					subarg=argv[optind++];
@@ -2642,6 +2974,7 @@ char **argv;
 						dedup = 0;
 					if(dedup >100)
 						dedup = 100;
+					dedup_flag = 1;
 					sprintf(splash[splash_line++],"\tDedup activated %d percent.\n",dedup);
 					break;
 				case 'y':  /* Argument is the percent of interior dedup */
@@ -2657,9 +2990,10 @@ char **argv;
 						dedup_interior = 0;
 					if(dedup_interior >100)
 						dedup_interior = 100;
+					dedup_iflag = 1;
 					sprintf(splash[splash_line++],"\tDedup within & across %d percent.\n",dedup_interior);
 					break;
-				case 'C':  /* Argument is the percent of dedupe within & !across */
+				case 'C':  /* Argument is the percent of dedup within & !across */
 					   /* Sets size of dedup region within and !across files */
 					subarg=argv[optind++];
 					if(subarg==(char *)0)
@@ -2672,6 +3006,7 @@ char **argv;
 						dedup_compress = 0;
 					if(dedup_compress >100)
 						dedup_compress = 100;
+					dedup_bflag = 1;
 					sprintf(splash[splash_line++],"\tDedup within %d percent.\n",dedup_compress);
 					break;
 				case 'S':  /* Argument is the seed for dedup */
@@ -2745,6 +3080,44 @@ char **argv;
 			exit(255);
 		}
 	}
+        /********************************************************/
+        /* Allocate and align buffer with beginning of the 	*/
+        /* on chip data cache. 					*/
+        /********************************************************/
+
+     	buffer = (char *) alloc_mem((long long)(MAXBUFFERSIZE + (2 * cache_size)),(int)0);
+	if(buffer == 0) {
+        	perror("Memory allocation failed:");
+        	exit(1);
+        }
+
+#ifdef _64BIT_ARCH_
+     	buffer = (char *) ((long long )(buffer + cache_size ) & 
+		~(cache_size-1));
+#else
+     	buffer = (char *) ((long)(buffer + cache_size ) & 
+		~((long)cache_size-1));
+#endif
+	mainbuffer = buffer;
+
+	/* de-dup input buf */
+     	buffer1 = (char *) alloc_mem((long long)(MAXBUFFERSIZE + (2 * cache_size)),(int)0);
+	if(buffer1 == 0) {
+        	perror("Memory allocation failed:");
+        	exit(1);
+        }
+
+#ifdef _64BIT_ARCH_
+     	buffer1 = (char *) ((long long )(buffer1 + cache_size ) & 
+		~(cache_size-1));
+#else
+     	buffer1 = (char *) ((long)(buffer1 + cache_size ) & 
+		~((long)cache_size-1));
+#endif
+	dedup_ibuf = buffer1;
+
+	dedup_temp = mainbuffer;
+	touch_dedup(buffer1, MAXBUFFERSIZE);
 	base_time=(long)time_so_far();
 	get_resolution(); 		/* Get clock resolution */
 	if(speed_code)
@@ -2885,7 +3258,7 @@ char **argv;
         /* Enforce only write,rewrite,read,reread */
         if(w_traj_flag || r_traj_flag)
         {
-                for(i=2;i<sizeof(func)/sizeof(char *);i++)
+                for(i=2;i<(long long)(sizeof(func)/sizeof(char *));i++)
                 {
                         if(seq_mix && (i==8))
                                 ;
@@ -2991,7 +3364,7 @@ char **argv;
 	}
 	if(include_tflag)
 	{
-		for(i=0;i<sizeof(func)/sizeof(char *);i++)
+		for(i=0;i<(long long)(sizeof(func)/sizeof(char *));i++)
 			if(include_test[i])
 				include_mask|=(long long)(1<<i);
 		/* printf(">> %llx",include_mask);  HERE */
@@ -3019,7 +3392,7 @@ char **argv;
 		printf("\n\tCan not do both -H and -k\n");
 		exit(20);
 	}
-	if((dedup | dedup_interior) && diag_v)
+	if((dedup_flag | dedup_iflag) && diag_v)
 	{
 		printf("\n\tCan not do both -+d and -+w\n");
 		exit(20);
@@ -3038,6 +3411,14 @@ char **argv;
     	if(!silent) printf("\tProcessor cache size set to %ld kBytes.\n",cache_size/1024);
     	if(!silent) printf("\tProcessor cache line size set to %ld bytes.\n",cache_line_size);
 	if(!silent) printf("\tFile stride size set to %lld * record size.\n",stride);
+#endif
+	if (burst_size_kb_64 != -1 && !silent)
+#ifdef NO_PRINT_LLD
+		printf("\tBurst size set to %ld Kbytes.\n\tBurst sleep duration set to %ld msec\n",
+		(long long)burst_size_kb_64, (long long)burst_sleep_duration_msec);
+#else
+		printf("\tBurst size set to %lld Kbytes.\n\tBurst sleep duration set to %lld msec\n",
+		(long long)burst_size_kb_64, (long long)burst_sleep_duration_msec);
 #endif
 	if(!rflag)
 		reclen=(long long)4096;
@@ -3273,14 +3654,14 @@ long long reclength;
 		if(!silent) printf("%8ld",reclen/1024);
 	}
 #else
-	if(!silent) printf("%16lld",kilobytes64);
+	if(!silent) printf("%16lld",(long long)kilobytes64);
 	if(r_traj_flag || w_traj_flag)
 	{
 		if(!silent) printf("%8lld",(long long )0);
 	}
 	else
 	{
-		if(!silent) printf("%8lld",reclen/1024);
+		if(!silent) printf("%8lld",(long long)(reclen/1024));
 	}
 #endif
 	if(include_tflag)
@@ -3328,11 +3709,11 @@ long long reclength;
 	    	goodrecl = reclen/2;
 	    	printf("\nI/O error during read.  Try again with the command:\n");
 #ifdef NO_PRINT_LLD
-	    	printf("\n\tiozone %ld %ld ", kilobytes64,  goodrecl);
-	    	printf("\t(i.e. record size = %ld bytes)\n",  goodrecl);
+	    	printf("\n\tiozone %ld %ld ", (long long)kilobytes64,  (long long)goodrecl);
+	    	printf("\t(i.e. record size = %ld bytes)\n",  (long long)goodrecl);
 #else
-	    	printf("\n\tiozone %lld %lld ", kilobytes64,  goodrecl);
-	    	printf("\t(i.e. record size = %lld bytes)\n",  goodrecl);
+	    	printf("\n\tiozone %lld %lld ", (long long)kilobytes64,  (long long)goodrecl);
+	    	printf("\t(i.e. record size = %lld bytes)\n",  (long long)goodrecl);
 #endif
 	   }
 	}
@@ -3368,9 +3749,17 @@ void show_help()
 
 ******************************************************************/
 #ifdef HAVE_ANSIC_C
-void signal_handler(void)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+my_sig_t signal_handler(void)
 #else
-void signal_handler()
+sighandler_t signal_handler(void)
+#endif
+#else
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__) || defined(solaris) || defined(Windows)
+my_sig_t signal_handler()
+#else
+sighandler_t signal_handler()
+#endif
 #endif
 {
 	long long i;
@@ -3469,10 +3858,10 @@ void auto_test()
         if (min_rec_size > (long long)(min_file_size*1024)) {
 #ifdef NO_PRINT_LLD
             printf("Error: record length %ld is greater than filesize %ld kB\n ",
-                                min_rec_size,min_file_size);
+                                (long long)min_rec_size,(long long)min_file_size);
 #else
             printf("Error: record length %lld is greater than filesize %lld kB\n ",
-                                min_rec_size,min_file_size);
+                                (long long)min_rec_size,(long long)min_file_size);
 #endif
                 exit(23);
         }
@@ -3596,6 +3985,25 @@ throughput_test()
 	else
 		unit="kB";
 
+#ifndef NO_THREADS
+	/*Init barriers*/
+	if(use_thread)
+	{
+		barrier = (pthread_barrier_t*)alloc_mem(sizeof(pthread_barrier_t), 0); // Not shared
+		pthread_barrierattr_setpshared(&barrier_attr, PTHREAD_PROCESS_PRIVATE);
+		pthread_barrier_init(barrier, &barrier_attr, num_child);
+	}
+	else
+	{
+		barrier = (pthread_barrier_t*)alloc_mem(sizeof(pthread_barrier_t), 1); // Shared
+		pthread_barrierattr_setpshared(&barrier_attr, PTHREAD_PROCESS_SHARED);
+		pthread_barrier_init(barrier, &barrier_attr, num_child);
+	}
+
+	if (burst_size_kb_64 != -1)
+		burst_size_per_child = burst_size_kb_64 * 1024 / num_child;
+#endif
+
 	if(!haveshm)
 	{
 		shmaddr=(struct child_stats *)alloc_mem((long long)SHMSIZE,(int)1);
@@ -3645,20 +4053,20 @@ throughput_test()
 	{
 #ifdef NO_PRINT_LLD
 	if(!silent) printf("\tEach %s writes a %ld kByte file in telemetry controlled records\n",
-		port,kilobytes64);
+		port,(long long)kilobytes64);
 #else
 	if(!silent) printf("\tEach %s writes a %lld kByte file in telemetry controlled records\n",
-		port,kilobytes64);
+		port,(long long)kilobytes64);
 #endif
 	}
 	else
 	{
 #ifdef NO_PRINT_LLD
 	if(!silent) printf("\tEach %s writes a %ld kByte file in %ld kbyte records\n",
-		port,kilobytes64,reclen/1024);
+		port,(long long)kilobytes64,(long long)reclen/1024);
 #else
 	if(!silent) printf("\tEach %s writes a %lld kByte file in %lld kByte records\n",
-		port,kilobytes64,reclen/1024);
+		port,(long long)kilobytes64,(long long)reclen/1024);
 #endif
 	}
 
@@ -3709,9 +4117,9 @@ throughput_test()
 #endif
 		if( childids[xx] == 0 ){
 #ifdef _64BIT_ARCH_
-		  thread_write_test((void *)xx);
+		  thread_write_test((int)xx);
 #else
-		  thread_write_test((void *)(long)xx);
+		  thread_write_test((int)xx);
 #endif
 		}else {
 #ifdef NO_PRINT_LLD
@@ -3734,7 +4142,7 @@ throughput_test()
 #endif
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -3744,9 +4152,9 @@ throughput_test()
 		}
 
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create(thread_write_test,(void*)xx);
+		childids[xx] = mythread_create((void *)thread_write_test,(int)xx);
 #else
-		childids[xx] = mythread_create(thread_write_test,(void*)(long)xx);
+		childids[xx] = mythread_create((void *)thread_write_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("Thread create failed\n");
@@ -3972,9 +4380,9 @@ waitout:
 		}
 		if(childids[xx] == 0){
 #ifdef _64BIT_ARCH_
-			thread_rwrite_test((void *)xx);
+			thread_rwrite_test((int)xx);
 #else
-			thread_rwrite_test((void *)((long)xx));
+			thread_rwrite_test((int)xx);
 #endif
 		}	
 	   }
@@ -3985,7 +4393,7 @@ waitout:
 	   for(xx = 0; xx< num_child ; xx++){	/* Create the children */
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+( 2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -3994,9 +4402,9 @@ waitout:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_rwrite_test,xx);
+		childids[xx] = mythread_create( (void *)thread_rwrite_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_rwrite_test,(void *)(long)xx);
+		childids[xx] = mythread_create( (void *)thread_rwrite_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -4217,9 +4625,9 @@ next0:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_read_test((void *)xx);
+			thread_read_test((int)xx);
 #else
-			thread_read_test((void *)((long)xx));
+			thread_read_test((int)xx);
 #endif
 		}	
 	   }
@@ -4230,7 +4638,7 @@ next0:
 	   for(xx = 0; xx< num_child ; xx++){	/* Create the children */
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -4239,9 +4647,9 @@ next0:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_read_test,xx);
+		childids[xx] = mythread_create((void *)thread_read_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_read_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_read_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -4451,9 +4859,9 @@ jumpend4:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_rread_test((void *)xx);
+			thread_rread_test((int)xx);
 #else
-			thread_rread_test((void *)((long)xx));
+			thread_rread_test((int)xx);
 #endif
 		}	
 	   }
@@ -4465,7 +4873,7 @@ jumpend4:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -4474,9 +4882,9 @@ jumpend4:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_rread_test,xx);
+		childids[xx] = mythread_create((void *)thread_rread_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_rread_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_rread_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -4691,9 +5099,9 @@ next1:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_reverse_read_test((void *)xx);
+			thread_reverse_read_test((int)xx);
 #else
-			thread_reverse_read_test((void *)((long)xx));
+			thread_reverse_read_test((int)xx);
 #endif
 		}	
 	   }
@@ -4705,7 +5113,7 @@ next1:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -4714,9 +5122,9 @@ next1:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_reverse_read_test,xx);
+		childids[xx] = mythread_create((void *)thread_reverse_read_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_reverse_read_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_reverse_read_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -4925,9 +5333,9 @@ next2:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_stride_read_test((void *)xx);
+			thread_stride_read_test((int)xx);
 #else
-			thread_stride_read_test((void *)((long)xx));
+			thread_stride_read_test((int)xx);
 #endif
 		}	
 	   }
@@ -4939,7 +5347,7 @@ next2:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -4948,9 +5356,9 @@ next2:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_stride_read_test,xx);
+		childids[xx] = mythread_create((void *)thread_stride_read_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_stride_read_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_stride_read_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -5160,9 +5568,9 @@ next3:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_ranread_test((void *)xx);
+			thread_ranread_test((int)xx);
 #else
-			thread_ranread_test((void *)((long)xx));
+			thread_ranread_test((int)xx);
 #endif
 		}	
 	   }
@@ -5174,7 +5582,7 @@ next3:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -5183,9 +5591,9 @@ next3:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_ranread_test,xx);
+		childids[xx] = mythread_create((void *)thread_ranread_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_ranread_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_ranread_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -5390,9 +5798,9 @@ next4:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_mix_test((void *)xx);
+			thread_mix_test((int)xx);
 #else
-			thread_mix_test((void *)((long)xx));
+			thread_mix_test((int)xx);
 #endif
 		}	
 	   }
@@ -5404,7 +5812,7 @@ next4:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -5413,9 +5821,9 @@ next4:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_mix_test,xx);
+		childids[xx] = mythread_create((void *)thread_mix_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_mix_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_mix_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -5620,9 +6028,9 @@ next5:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_ranwrite_test((void *)xx);
+			thread_ranwrite_test((int)xx);
 #else
-			thread_ranwrite_test((void *)((long)xx));
+			thread_ranwrite_test((int)xx);
 #endif
 		}	
 	   }
@@ -5634,7 +6042,7 @@ next5:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -5643,9 +6051,9 @@ next5:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_ranwrite_test,xx);
+		childids[xx] = mythread_create((void *)thread_ranwrite_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_ranwrite_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_ranwrite_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -5853,9 +6261,9 @@ next6:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_pwrite_test((void *)xx);
+			thread_pwrite_test((int)xx);
 #else
-			thread_pwrite_test((void *)((long)xx));
+			thread_pwrite_test((int)xx);
 #endif
 		}	
 	   }
@@ -5867,7 +6275,7 @@ next6:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -5876,9 +6284,9 @@ next6:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_pwrite_test,xx);
+		childids[xx] = mythread_create((void *)thread_pwrite_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_pwrite_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_pwrite_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -6088,9 +6496,9 @@ next7:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_pread_test((void *)xx);
+			thread_pread_test((int)xx);
 #else
-			thread_pread_test((void *)((long)xx));
+			thread_pread_test((int)xx);
 #endif
 		}	
 	   }
@@ -6102,7 +6510,7 @@ next7:
 		chid=xx;
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -6111,9 +6519,9 @@ next7:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_pread_test,xx);
+		childids[xx] = mythread_create((void *)thread_pread_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_pread_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_pread_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -6314,9 +6722,9 @@ next8:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_fwrite_test((void *)xx);
+			thread_fwrite_test((int)xx);
 #else
-			thread_fwrite_test((void *)((long)xx));
+			thread_fwrite_test((int)xx);
 #endif
 		}	
 	   }
@@ -6327,7 +6735,7 @@ next8:
 	   for(xx = 0; xx< num_child ; xx++){	/* Create the children */
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -6336,9 +6744,9 @@ next8:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_fwrite_test,xx);
+		childids[xx] = mythread_create((void *)thread_fwrite_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_fwrite_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_fwrite_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -6544,9 +6952,9 @@ next9:
 		}
 		if(childids[xx]==0){
 #ifdef _64BIT_ARCH_
-			thread_fread_test((void *)xx);
+			thread_fread_test((int)xx);
 #else
-			thread_fread_test((void *)((long)xx));
+			thread_fread_test((int)xx);
 #endif
 		}	
 	   }
@@ -6557,7 +6965,7 @@ next9:
 	   for(xx = 0; xx< num_child ; xx++){	/* Create the children */
 		if(!barray[xx])
 		{
-			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+cache_size),(int)0);
+			barray[xx]=(char *) alloc_mem((long long)(MAXBUFFERSIZE+(2 * cache_size)),(int)0);
 			if(barray[xx] == 0) {
         		   perror("Memory allocation failed:");
         		   exit(26);
@@ -6566,9 +6974,9 @@ next9:
 			~(cache_size-1));
 		}
 #ifdef _64BIT_ARCH_
-		childids[xx] = mythread_create( thread_fread_test,xx);
+		childids[xx] = mythread_create((void *)thread_fread_test,(int)xx);
 #else
-		childids[xx] = mythread_create( thread_fread_test,(void *)(long)xx);
+		childids[xx] = mythread_create((void *)thread_fread_test,(int)xx);
 #endif
 		if(childids[xx]==-1){
 			printf("\nThread create failed\n");
@@ -6770,9 +7178,9 @@ next10:
 			}
 			if(childids[xx] == 0){
 #ifdef _64BIT_ARCH_
-				thread_cleanup_test((void *)xx);
+				thread_cleanup_test((int)xx);
 #else
-				thread_cleanup_test((void *)((long)xx));
+				thread_cleanup_test((int)xx);
 #endif
 			}	
 		   }
@@ -6782,9 +7190,9 @@ next10:
 		{
 		   for(xx = 0; xx< num_child ; xx++){	/* Create the children */
 #ifdef _64BIT_ARCH_
-			childids[xx] = mythread_create( thread_cleanup_test,xx);
+			childids[xx] = mythread_create((void *)thread_cleanup_test,(int)xx);
 #else
-			childids[xx] = mythread_create( thread_cleanup_test,(void *)(long)xx);
+			childids[xx] = mythread_create((void *)thread_cleanup_test,(int)xx);
 #endif
 			if(childids[xx]==-1){
 				printf("\nThread create failed\n");
@@ -6859,6 +7267,12 @@ next10:
 			cleanup_comm();
 		}
 	}
+
+#ifndef NO_THREADS
+	/* Destroy the barrier */
+	pthread_barrier_destroy(barrier);
+#endif
+
 	/********************************************************/
 	/* End of cleanup					*/
 	/********************************************************/
@@ -6954,7 +7368,7 @@ long long length;
 	where=(char *)buffer;
 
 	if(cache_line_size == 0) /* This shouldn't be needed */
-		cache_line_size=CACHE_LINE_SIZE;
+		cache_line_size=MY_CACHE_LINE_SIZE;
 
 	for(i=0;i<(length/cache_line_size);i++)
 	{
@@ -7027,14 +7441,14 @@ char sverify;
 	  }
 	  return(0);
 	}
-	if(dedup)
+	if(dedup_flag)
 	{
 		gen_new_buf((char *)dedup_ibuf,(char *)dedup_temp, (long)recnum, (int)length,(int)dedup, (int) dedup_interior, dedup_compress, 0);
 		de_ibuf = (long *)buffer;
 		de_obuf = (long *)dedup_temp;
 		if(lite)	/* short touch to reduce intrusion */
-			length = (long) sizeof(long);
-		for(i=0;i<length/sizeof(long);i++)
+			length = (long long) sizeof(long);
+		for(i=0;i<(off64_t) (length/sizeof(long));i++)
 		{
 			if(de_ibuf[i]!= de_obuf[i])
 			{
@@ -7080,13 +7494,13 @@ char sverify;
 	printf("\n\n");
 #ifdef NO_PRINT_LLD
 	printf("Error in file: Found ?%lx? Expecting ?%lx? addr %lx\n",*where, (long long)((pattern_buf<<32)|pattern_buf),where);
-	printf("Error in file: Position %ld \n",file_position);
-	printf("Record # %ld Record size %ld kb \n",recnum,recsize/1024);
+	printf("Error in file: Position %ld \n",(long long)file_position);
+	printf("Record # %ld Record size %ld kb \n",(long long)recnum,(long long)recsize/1024);
 	printf("where %8.8lx loop %ld\n",where,i);
 #else
-	printf("Error in file: Found ?%llx? Expecting ?%llx? addr %lx\n",*where, (long long)((pattern_buf<<32)|pattern_buf),((long)where));
-	printf("Error in file: Position %lld \n",file_position);
-	printf("Record # %lld Record size %lld kb \n",recnum,recsize/1024);
+	printf("Error in file: Found ?%llx? Expecting ?%llx? addr %lx\n",(long long )(*where), (long long)((pattern_buf<<32)|pattern_buf),((long)where));
+	printf("Error in file: Position %lld \n",(long long)file_position);
+	printf("Record # %lld Record size %lld kb \n",(long long)recnum,(long long)recsize/1024);
 	printf("where %px loop %lld\n",where,(long long)i);
 #endif
 		   return(1);
@@ -7098,7 +7512,7 @@ char sverify;
 	{
 	  for(i=0;i<(length/cache_line_size);i++)
 	  {
-	   for(j=0;j<(cache_line_size/sizeof(long long));j++)
+	   for(j=0;j<(long long)(cache_line_size/sizeof(long long));j++)
 	   {
               if(diag_v)
 	      {
@@ -7116,7 +7530,7 @@ char sverify;
 		   file_position = (off64_t)( (recnum * recsize))+
 			((i*cache_line_size)+(j*sizeof(long long)));
 		   where2=(char *)where;
-		   for(k=0;k<sizeof(long long);k++){
+		   for(k=0;k<(long long)(sizeof(long long));k++){
 		   	if(*where2 != *pattern_ptr)
 				break;
 		   	where2++;
@@ -7125,13 +7539,13 @@ char sverify;
 		   file_position+=k;
 	printf("\n\n");
 #ifdef NO_PRINT_LLD
-	printf("Error in file: Position %ld %ld %ld \n",i,j,k);
-	printf("Error in file: Position %ld \n",file_position);
-	printf("Record # %ld Record size %ld kb \n",recnum,recsize/1024);
+	printf("Error in file: Position %ld %ld %ld \n",(long long)i,(long long)j,(long long)k);
+	printf("Error in file: Position %ld \n",(long long)file_position);
+	printf("Record # %ld Record size %ld kb \n",(long long)recnum,(long long)recsize/1024);
 #else
-	printf("Error in file: Position %lld %lld %lld \n",i,j,k);
-	printf("Error in file: Position %lld \n",file_position);
-	printf("Record # %lld Record size %lld kb \n",recnum,recsize/1024);
+	printf("Error in file: Position %lld %lld %lld \n",(long long)i,(long long)j,(long long)k);
+	printf("Error in file: Position %lld \n",(long long)file_position);
+	printf("Record # %lld Record size %lld kb \n",(long long)recnum,(long long)recsize/1024);
 #endif
 	printf("Found pattern: Char >>%c<< Expecting >>%c<<\n", *where2,*pattern_ptr);
 	printf("Found pattern: Hex >>%x<< Expecting >>%x<<\n", *where2,*pattern_ptr);
@@ -7181,7 +7595,7 @@ char sverify;
 	x=0;
 	mpattern=pattern;
 	/* printf("Fill: Sverify %d verify %d diag_v %d\n",sverify,verify,diag_v);*/
-	if(dedup)
+	if(dedup_flag)
 	{
 		gen_new_buf((char *)dedup_ibuf,(char *)buffer, (long)recnum, (int)length,(int)dedup, (int) dedup_interior, dedup_compress, 1);
 		return;
@@ -7213,7 +7627,7 @@ char sverify;
 	{
 		for(i=0;i<(length/cache_line_size);i++)
 		{
-			for(j=0;j<(cache_line_size/sizeof(long long));j++)
+			for(j=0;j<(long long)((cache_line_size/sizeof(long long)));j++)
 			{
 				if(diag_v)
 				{
@@ -7303,6 +7717,8 @@ long long *data1;
 long long *data2;
 #endif
 {
+	double burst_sleep_time_till_now[2] = {0, 0};
+
 	double starttime1;
 	double writetime[2];
 	double walltime[2], cputime[2];
@@ -7317,7 +7733,7 @@ long long *data2;
 	off64_t numrecs64,traj_offset;
 	off64_t lock_offset=0;
 	long long Index = 0;
-	long long file_flags = 0;
+	int file_flags = 0;
 	long long traj_size;
 	unsigned long long writerate[2];
 	off64_t filebytes64;
@@ -7523,6 +7939,16 @@ long long *data2;
 #if defined(Windows)
 	  	}
 #endif
+
+#if defined __APPLE__ && __MACH__
+        	if(direct_flag) {
+            	   if (fcntl(fd,F_NOCACHE,1) == -1 ) {
+                      printf("\n%s while fcntl",strerror(errno));
+                      exit(51966);
+                   }
+                }
+#endif
+
 #ifdef VXFS
 		if(direct_flag)
 		{
@@ -7585,7 +8011,7 @@ long long *data2;
 		pbuff=mainbuffer;
 		if(fetchon)
 			fetchit(pbuff,reclen);
-		if(verify || dedup || dedup_interior)
+		if(verify || dedup_flag || dedup_iflag)
 			fill_buffer(pbuff,reclen,(long long)pattern,sverify,(long long)0);
 		starttime1 = time_so_far();
 #ifdef unix
@@ -7629,7 +8055,7 @@ long long *data2;
 				mylockr((int) fd, (int) 1, (int)0,
 				  lock_offset, reclen);
 			}
-			if((verify && diag_v) || dedup || dedup_interior)
+			if((verify && diag_v) || dedup_flag || dedup_iflag)
 				fill_buffer(pbuff,reclen,(long long)pattern,sverify,i);
 			if(compute_flag)
 				compute_val+=do_compute(compute_time);
@@ -7641,12 +8067,12 @@ long long *data2;
 				pbuff = mbuffer + Index;	
 				if(diag_v)
 				{
-				   if(verify || dedup || dedup_interior)
+				   if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(pbuff,reclen,(long long)pattern,sverify,(long long)i);
 				}
 				else
 				{
-				   if(verify || dedup || dedup_interior)
+				   if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(pbuff,reclen,(long long)pattern,sverify,(long long)0);
 				}
 			}
@@ -7654,7 +8080,7 @@ long long *data2;
 			{
 				free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 				nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 				if(purge)
 					purgeit(nbuff,reclen);
@@ -7715,6 +8141,10 @@ long long *data2;
 #if defined(Windows)
 			    }
 #endif
+					/* The burst work does not work for async or memory
+					 * mapped IO */
+					if (wval != -1)
+						update_burst_sleep(fd, wval, &burst_sleep_time_till_now[j]);
 			  }
 			}
 			if(hist_summary)
@@ -7728,13 +8158,13 @@ long long *data2;
 				qtime_stop=time_so_far();
 				if(j==0)
 #ifdef NO_PRINT_LLD
-				fprintf(wqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,reclen);
+				fprintf(wqfd,"%10.1ld %10.0f %10.1ld\n",(long long)(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,(long long)reclen);
 				else
-				fprintf(rwqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,reclen);
+				fprintf(rwqfd,"%10.1ld %10.0f %10.1ld\n",(long long)(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,(long long)reclen);
 #else
-				fprintf(wqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,reclen);
+				fprintf(wqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,(long long)reclen);
 				else
-				fprintf(rwqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,reclen);
+				fprintf(rwqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((qtime_stop-qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 			}
 			w_traj_ops_completed++;
@@ -7805,9 +8235,9 @@ long long *data2;
 			   }
 		}
 		if(inc_think)
-		   writetime[j] = ((time_so_far() - starttime1)-time_res);
+		   writetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j]);
 		else
-		   writetime[j] = ((time_so_far() - starttime1)-time_res)
+		   writetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j])
 			-compute_val;
 		if(writetime[j] < (double).000001) 
 		{
@@ -7894,12 +8324,12 @@ long long *data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)writerate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%8ld",writerate[0]);
-	if(!silent) printf("%8ld",writerate[1]);
+	if(!silent) printf("%9ld",writerate[0]);
+	if(!silent) printf("%9ld",writerate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%8lld",writerate[0]);
-	if(!silent) printf("%8lld",writerate[1]);
+	if(!silent) printf("%9lld",writerate[0]);
+	if(!silent) printf("%9lld",writerate[1]);
 	if(!silent) fflush(stdout);
 #endif
 }
@@ -7917,6 +8347,7 @@ long long *data1;
 long long *data2;
 #endif
 {
+	double burst_sleep_time_till_now[2] = {0, 0};
 	double starttime1;
 	double writetime[2];
 	double walltime[2], cputime[2];
@@ -7991,7 +8422,7 @@ long long *data2;
 		buffer=mainbuffer;
 		if(fetchon)
 			fetchit(buffer,reclen);
-		if(verify || dedup || dedup_interior)
+		if(verify || dedup_flag || dedup_iflag)
 			fill_buffer(buffer,reclen,(long long)pattern,sverify,(long long)0);
 		starttime1 = time_so_far();
 		compute_val=(double)0;
@@ -8005,7 +8436,7 @@ long long *data2;
 					Index=0;
 				buffer = mbuffer + Index;	
 			}
-			if((verify & diag_v) || dedup || dedup_interior)
+			if((verify & diag_v) || dedup_flag || dedup_iflag)
 				fill_buffer(buffer,reclen,(long long)pattern,sverify,i);
 			if(purge)
 				purgeit(buffer,reclen);
@@ -8022,6 +8453,7 @@ long long *data2;
 				exit_code = 74;
 				signal_handler();
 			}
+			update_burst_sleep(fd, reclen, &burst_sleep_time_till_now[j]);
 		}
 
 		if(include_flush)
@@ -8042,9 +8474,9 @@ long long *data2;
 			}
 		}
 		if(inc_think)
-		   writetime[j] = ((time_so_far() - starttime1)-time_res);
+		   writetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j]);
 		else
-		   writetime[j] = ((time_so_far() - starttime1)-time_res)
+		   writetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j])
 			-compute_val;
 		if(writetime[j] < (double).000001) 
 		{
@@ -8223,18 +8655,18 @@ long long *data1,*data2;
 			{
 #ifdef _64BIT_ARCH_
 #ifdef NO_PRINT_LLD
-				printf("\nError freading block %lu %lx\n", i,
+				printf("\nError freading block %lu %lx\n", (long long)i,
 					(unsigned long long)buffer);
 #else
-				printf("\nError freading block %llu %llx\n", i,
+				printf("\nError freading block %llu %llx\n", (long long)i,
 					(unsigned long long)buffer);
 #endif
 #else
 #ifdef NO_PRINT_LLD
-				printf("\nError freading block %lu %lx\n", i,
+				printf("\nError freading block %lu %lx\n", (long long)i,
 					(long)buffer);
 #else
-				printf("\nError freading block %llu %lx\n", i,
+				printf("\nError freading block %llu %lx\n", (long long)i,
 					(long)buffer);
 #endif
 #endif
@@ -8321,11 +8753,11 @@ long long *data1,*data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)readrate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%8ld",readrate[0]);
+	if(!silent) printf("%9ld",readrate[0]);
 	if(!silent) printf("%9ld",readrate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%8lld",readrate[0]);
+	if(!silent) printf("%9lld",readrate[0]);
 	if(!silent) printf("%9lld",readrate[1]);
 	if(!silent) fflush(stdout);
 #endif
@@ -8641,18 +9073,18 @@ long long *data1,*data2;
 			    {
 #ifdef _64BIT_ARCH_
 #ifdef NO_PRINT_LLD
-				printf("\nError reading block %ld %lx\n", i,
+				printf("\nError reading block %ld %lx\n", (long)i,
 					(unsigned long long)nbuff);
 #else
-				printf("\nError reading block %lld %llx\n", i,
+				printf("\nError reading block %lld %llx\n", (long long)i,
 					(unsigned long long)nbuff);
 #endif
 #else
 #ifdef NO_PRINT_LLD
-				printf("\nError reading block %ld %x\n", i,
+				printf("\nError reading block %ld %x\n", (long)i,
 					(long)nbuff);
 #else
-				printf("\nError reading block %lld %lx\n", i,
+				printf("\nError reading block %lld %lx\n", (long long)i,
 					(long)nbuff);
 #endif
 #endif
@@ -8689,13 +9121,13 @@ long long *data1,*data2;
 				qtime_stop=time_so_far();
 				if(j==0)
 #ifdef NO_PRINT_LLD
-				fprintf(rqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,reclen);
+				fprintf(rqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,(long)reclen);
 				else
-				fprintf(rrqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,reclen);
+				fprintf(rrqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,(long)reclen);
 #else
-				fprintf(rqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,reclen);
+				fprintf(rqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,(long long)reclen);
 				else
-				fprintf(rrqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,reclen);
+				fprintf(rrqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,(qtime_stop-qtime_start-time_res)*1000000,(long long)reclen);
 #endif
 			}
 			r_traj_ops_completed++;
@@ -8869,6 +9301,7 @@ long long *data1, *data2;
 	long long j;
 	off64_t i,numrecs64;
 	long long Index=0;
+	double burst_sleep_time_till_now[2] = {0, 0};
 	int flags;
 	unsigned long long randreadrate[2];
 	off64_t filebytes64;
@@ -8913,7 +9346,7 @@ long long *data1, *data2;
             for(i = 0; i < numrecs64; i++){
                 recnum[i] = i;
             }
-            for(i = 0; i < numrecs64; i++) {
+            for(i = numrecs64-1; i >= 0; i--) {
                 long long tmp;
 #ifdef MERSENNE
       	       big_rand=genrand64_int64();
@@ -8934,7 +9367,7 @@ long long *data1, *data2;
 #endif
 #endif
 #endif
-               big_rand = big_rand%numrecs64;
+               big_rand = big_rand % (i+1);
                tmp = recnum[i];
                recnum[i] = recnum[big_rand];
                recnum[big_rand] = tmp;
@@ -9039,7 +9472,7 @@ long long *data1, *data2;
 #endif
 	     compute_val=(double)0;
 	     starttime2 = time_so_far();
-	     if ( j==0 ){
+	     if ( j==0 ){ /* start read */
 		for(i=0; i<numrecs64; i++) {
 			if(compute_flag)
 				compute_val+=do_compute(compute_time);
@@ -9118,10 +9551,10 @@ long long *data1, *data2;
 		  	     {
 #ifdef NO_PRINT_LLD
 				 printf("\nError reading block at %ld\n",
-					 offset64); 
+					 (long)offset64); 
 #else
 				 printf("\nError reading block at %lld\n",
-					 offset64); 
+					 (long long)offset64); 
 #endif
 				 perror("read");
 				 exit(70);
@@ -9151,11 +9584,11 @@ long long *data1, *data2;
 				  lock_offset, reclen);
 			}
 		}
-	     }
+	     } /* start write */
 	     else
 	     {
 		     unsigned long nwrites = 0;
-			if(verify || dedup || dedup_interior)
+			if(verify || dedup_flag || dedup_iflag)
 				fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 			for(i=0; i<numrecs64; i++) 
 			{
@@ -9195,13 +9628,13 @@ long long *data1, *data2;
 				{
 					free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 					nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-					if(verify || dedup || dedup_interior)
+					if(verify || dedup_flag || dedup_iflag)
 						fill_buffer(nbuff,reclen,(long long)pattern,sverify,offset64/reclen);
 				}
 				if(purge)
 					purgeit(nbuff,reclen);
 
-				if((verify & diag_v) || dedup || dedup_interior)
+				if((verify & diag_v) || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,offset64/reclen);
 
 				if (!(h_flag || k_flag || mmapflag))
@@ -9243,19 +9676,19 @@ long long *data1, *data2;
 			  		  {
 #ifdef NO_PRINT_LLD
 						printf("\nError writing block at %ld\n",
-							offset64); 
+							(long)offset64); 
 #else
 						printf("\nError writing block at %lld\n",
-							offset64); 
+							(long long)offset64); 
 #endif
 						if(wval==-1)
 							perror("write");
 						exit_code = 74;
 						signal_handler();
 			 		  }
-					}
-
-					if (fsync_rate > 1 && (nwrites++ % fsync_rate) == 0) {
+					  if (wval != -1)
+						update_burst_sleep(fd, wval, &burst_sleep_time_till_now[j]);
+					  if (fsync_rate > 1 && (nwrites++ % fsync_rate) == 0)
 						fsync(fd);
 					}
 				}
@@ -9299,9 +9732,9 @@ long long *data1, *data2;
 		}
 	     }
 	     if(inc_think)
-	        randreadtime[j] = ((time_so_far() - starttime2)-time_res);
+	        randreadtime[j] = ((time_so_far() - starttime2)-time_res - burst_sleep_time_till_now[j]);
 	     else
-	        randreadtime[j] = ((time_so_far() - starttime2)-time_res)-
+	        randreadtime[j] = ((time_so_far() - starttime2)-time_res - burst_sleep_time_till_now[j])-
 			compute_val;
 	     if(randreadtime[j] < (double).000001) 
 	     {
@@ -9377,12 +9810,12 @@ long long *data1, *data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)randreadrate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%9ld",randreadrate[0]);
-	if(!silent) printf("%9ld",randreadrate[1]);
+	if(!silent) printf("%9ld",(long)randreadrate[0]);
+	if(!silent) printf("%9ld",(long)randreadrate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%9lld",randreadrate[0]);
-	if(!silent) printf("%9lld",randreadrate[1]);
+	if(!silent) printf("%9lld",(long long)randreadrate[0]);
+	if(!silent) printf("%9lld",(long long)randreadrate[1]);
 	if(!silent) fflush(stdout);
 #endif
 	if(recnum)
@@ -9564,9 +9997,9 @@ long long *data1,*data2;
 				if(read((int)fd, (void*)nbuff, (size_t) reclen) != reclen)
 				{
 #ifdef NO_PRINT_LLD
-					printf("\nError reading block %ld\n", i); 
+					printf("\nError reading block %ld\n", (long)i); 
 #else
-					printf("\nError reading block %lld\n", i); 
+					printf("\nError reading block %lld\n", (long long)i); 
 #endif
 					perror("read");
 					exit(79);
@@ -9678,9 +10111,9 @@ long long *data1,*data2;
 		store_times(walltime[0], cputime[0]);
 	store_value((off64_t)revreadrate[0]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%8ld",revreadrate[0]);
+	if(!silent) printf("%9ld",(long)revreadrate[0]);
 #else
-	if(!silent) printf("%8lld",revreadrate[0]);
+	if(!silent) printf("%9lld",(long long)revreadrate[0]);
 #endif
 	if(!silent) fflush(stdout);
 }
@@ -9698,6 +10131,7 @@ long long reclen;
 long long *data1,*data2;
 #endif
 {
+	double burst_sleep_time_till_now = 0;
 	double writeintime;
 	double starttime1;
 	double walltime, cputime;
@@ -9811,9 +10245,9 @@ long long *data1,*data2;
 	if(wval != reclen)
 	{
 #ifdef NO_PRINT_LLD
-	    	printf("\nError writing block %ld, fd= %d\n", 0, fd);
+	    	printf("\nError writing block %ld, fd= %d\n", (long)0, fd);
 #else
-	    	printf("\nError writing block %lld, fd= %d\n", 0, fd);
+	    	printf("\nError writing block %lld, fd= %d\n", (long long)0, fd);
 #endif
 		if(wval==-1)
 			perror("write");
@@ -9821,7 +10255,7 @@ long long *data1,*data2;
 		signal_handler();
 	}
 	*/
-	if(verify || dedup || dedup_interior)
+	if(verify || dedup_flag || dedup_iflag)
 		fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 	starttime1 = time_so_far();
 	if(cpuutilflag)
@@ -9849,10 +10283,10 @@ long long *data1,*data2;
 		{
 			free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 			nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-			if(verify || dedup || dedup_interior)
+			if(verify || dedup_flag || dedup_iflag)
 				fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 		}
-		if((verify & diag_v) || dedup || dedup_interior)
+		if((verify & diag_v) || dedup_flag || dedup_iflag)
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 		if(purge)
 			purgeit(nbuff,reclen);
@@ -9883,15 +10317,17 @@ long long *data1,*data2;
 			       if(wval != reclen)
 			       {
 #ifdef NO_PRINT_LLD
-		    		   printf("\nError writing block %ld, fd= %d\n", i, fd);
+		    		   printf("\nError writing block %ld, fd= %d\n", (long)i, fd);
 #else
-		    		   printf("\nError writing block %lld, fd= %d\n", i, fd);
+		    		   printf("\nError writing block %lld, fd= %d\n", (long long)i, fd);
 #endif
 				   if(wval==-1)
 				   	perror("write");
 				   exit_code = 74;
 				   signal_handler();
 			       }
+			       if (wval != -1)
+						update_burst_sleep(fd, wval, &burst_sleep_time_till_now);
 			  }
 		}
 		if(rlocking)
@@ -9949,6 +10385,7 @@ long long *data1,*data2;
 		if (walltime < cputime)
 		   walltime = cputime;
 	}
+	writeintime  -= burst_sleep_time_till_now;
 	if(writeintime < (double).000001) 
 	{
 		writeintime= time_res;
@@ -9997,9 +10434,9 @@ long long *data1,*data2;
 		store_times(walltime, cputime);
 	store_value((off64_t)writeinrate);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf(" %8ld",writeinrate);
+	if(!silent) printf(" %9ld",(long)writeinrate);
 #else
-	if(!silent) printf(" %8lld",writeinrate);
+	if(!silent) printf(" %9lld",(long long)writeinrate);
 #endif
 	if(!silent) fflush(stdout);
 	if(restf)
@@ -10164,11 +10601,11 @@ long long *data1, *data2;
 		   	  if((uu=read((int)fd, (void*)nbuff, (size_t) reclen)) != reclen)
 		   	  {
 #ifdef NO_PRINT_LLD
-		    		printf("\nError reading block %ld, fd= %d Filename %s Read returned %ld\n", i, fd,filename,uu);
-		    		printf("\nSeeked to %ld Reclen = %ld\n", savepos64,reclen);
+		    		printf("\nError reading block %ld, fd= %d Filename %s Read returned %ld\n", (long)i, fd,filename,uu);
+		    		printf("\nSeeked to %ld Reclen = %ld\n", (long)savepos64,(long)reclen);
 #else
-		    		printf("\nError reading block %lld, fd= %d Filename %s Read returned %lld\n", i, fd,filename,uu);
-		    		printf("\nSeeked to %lld Reclen = %lld\n", savepos64,reclen);
+		    		printf("\nError reading block %lld, fd= %d Filename %s Read returned %lld\n", (long long)i, fd,filename,(long long)uu);
+		    		printf("\nSeeked to %lld Reclen = %lld\n", (long long)savepos64,(long long)reclen);
 #endif
 				perror("read");
 		    		exit(88);
@@ -10320,9 +10757,9 @@ long long *data1, *data2;
 		store_times(walltime, cputime);
 	store_value((off64_t)strideinrate);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf(" %8ld",strideinrate);
+	if(!silent) printf(" %9ld",(long)strideinrate);
 #else
-	if(!silent) printf(" %8lld",strideinrate);
+	if(!silent) printf(" %9lld",(long long)strideinrate);
 #endif
 	if(!silent) fflush(stdout);
 	if(restf)
@@ -10343,6 +10780,7 @@ long long reclen;
 long long *data1,*data2;
 #endif
 {
+	double burst_sleep_time_till_now[2] = {0, 0};
 	double pwritetime[2];
 	double starttime1;
 	double walltime[2], cputime[2];
@@ -10455,7 +10893,7 @@ long long *data1,*data2;
 		mbuffer=mainbuffer;
 		if(fetchon)
 			fetchit(nbuff,reclen);
-		if(verify || dedup || dedup_interior)
+		if(verify || dedup_flag || dedup_iflag)
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 		starttime1 = time_so_far();
 	        compute_val=(double)0;
@@ -10486,22 +10924,24 @@ long long *data1,*data2;
                                         Index=0;
                                 nbuff = mbuffer + Index;
                         }
-			if((verify && diag_v) || dedup || dedup_interior)
+			if((verify && diag_v) || dedup_flag || dedup_iflag)
 				fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 			if(purge)
 				purgeit(nbuff,reclen);
 			if(I_PWRITE(fd, nbuff, reclen, traj_offset) != reclen)
 			{
 #ifdef NO_PRINT_LLD
-			    	printf("\nError pwriting block %ld, fd= %d\n", i,
+			    	printf("\nError pwriting block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-			    	printf("\nError pwriting block %lld, fd= %d\n", i,
+			    	printf("\nError pwriting block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				perror("pwrite");
 				exit_code = 74;
 				signal_handler();
+			} else {
+				update_burst_sleep(fd, reclen, &burst_sleep_time_till_now[j]);
 			}
 			if(rlocking)
 			{
@@ -10526,9 +10966,9 @@ long long *data1,*data2;
 			}
 		}
 		if(inc_think)
-		   pwritetime[j] = ((time_so_far() - starttime1)-time_res);
+		   pwritetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j]);
 		else
-		   pwritetime[j] = ((time_so_far() - starttime1)-time_res)
+		   pwritetime[j] = ((time_so_far() - starttime1)-time_res - burst_sleep_time_till_now[j])
 			-compute_val;
 		if(pwritetime[j] < (double).000001) 
 		{
@@ -10598,12 +11038,12 @@ long long *data1,*data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)pwriterate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%8ld",pwriterate[0]);
-	if(!silent) printf("%9ld",pwriterate[1]);
+	if(!silent) printf("%8ld",(long)pwriterate[0]);
+	if(!silent) printf("%9ld",(long)pwriterate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%8lld",pwriterate[0]);
-	if(!silent) printf("%9lld",pwriterate[1]);
+	if(!silent) printf("%9lld",(long long)pwriterate[0]);
+	if(!silent) printf("%9lld",(long long)pwriterate[1]);
 	if(!silent) fflush(stdout);
 #endif
 }
@@ -10757,9 +11197,9 @@ long long *data1, *data2;
 					!= reclen)
 			{
 #ifdef NO_PRINT_LLD
-				printf("\nError reading block %ld %lx\n", i,(unsigned long)nbuff);
+				printf("\nError reading block %ld %lx\n", (long)i,(unsigned long)nbuff);
 #else
-				printf("\nError reading block %lld %lx\n", i,(unsigned long)nbuff);
+				printf("\nError reading block %lld %lx\n", (long long)i,(unsigned long)nbuff);
 #endif
 				perror("pread");
 				exit(103);
@@ -10847,12 +11287,12 @@ long long *data1, *data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)preadrate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%8ld",preadrate[0]);
-	if(!silent) printf("%9ld",preadrate[1]);
+	if(!silent) printf("%8ld",(long)preadrate[0]);
+	if(!silent) printf("%9ld",(long)preadrate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%8lld",preadrate[0]);
-	if(!silent) printf("%9lld",preadrate[1]);
+	if(!silent) printf("%8lld",(long long)preadrate[0]);
+	if(!silent) printf("%9lld",(long long)preadrate[1]);
 	if(!silent) fflush(stdout);
 #endif
 }
@@ -11003,7 +11443,7 @@ long long *data1,*data2;
 			{
 				piov[xx].piov_base = 
 					(caddr_t)(nbuff+(xx * reclen));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(piov[xx].piov_base,reclen,(long long)pattern,sverify,i);
 				piov[xx].piov_len = reclen;
 #ifdef PER_VECTOR_OFFSET
@@ -11019,10 +11459,10 @@ long long *data1,*data2;
 				) != (reclen*numvecs))
 			{
 #ifdef NO_PRINT_LLD
-			    	printf("\nError pwriteving block %ld, fd= %d\n", i,
+			    	printf("\nError pwriteving block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-			    	printf("\nError pwriteving block %lld, fd= %d\n", i,
+			    	printf("\nError pwriteving block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				perror("pwritev");
@@ -11118,12 +11558,12 @@ long long *data1,*data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)pwritevrate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%9ld",pwritevrate[0]);
-	if(!silent) printf("%10ld",pwritevrate[1]);
+	if(!silent) printf("%9ld",(long)pwritevrate[0]);
+	if(!silent) printf("%10ld",(long)pwritevrate[1]);
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%9lld",pwritevrate[0]);
-	if(!silent) printf("%10lld",pwritevrate[1]);
+	if(!silent) printf("%9lld",(long long)pwritevrate[0]);
+	if(!silent) printf("%10lld",(long long)pwritevrate[1]);
 	if(!silent) fflush(stdout);
 #endif
 }
@@ -11349,9 +11789,9 @@ long long *data1,*data2;
 				) != (numvecs * reclen))
 			{
 #ifdef NO_PRINT_LLD
-				printf("\nError preadving block %ld \n", i);
+				printf("\nError preadving block %ld \n", (long)i);
 #else
-				printf("\nError preadving block %lld \n", i);
+				printf("\nError preadving block %lld \n", (long long)i);
 #endif
 				perror("preadv");
 				exit(116);
@@ -11426,13 +11866,13 @@ long long *data1,*data2;
 		store_times(walltime[1], cputime[1]);
 	store_value((off64_t)preadvrate[1]);
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%10ld",preadvrate[0]);
-	if(!silent) printf("%9ld",preadvrate[1]);
+	if(!silent) printf("%10ld",(long)preadvrate[0]);
+	if(!silent) printf("%9ld",(long)preadvrate[1]);
 	if(!silent) printf("\n");
 	if(!silent) fflush(stdout);
 #else
-	if(!silent) printf("%10lld",preadvrate[0]);
-	if(!silent) printf("%9lld",preadvrate[1]);
+	if(!silent) printf("%10lld",(long long)preadvrate[0]);
+	if(!silent) printf("%9lld",(long long)preadvrate[1]);
 	if(!silent) printf("\n");
 	if(!silent) fflush(stdout);
 #endif
@@ -11689,9 +12129,9 @@ long long who;
 		if(bif_flag)
 			do_float(bif_fd,(double)(rec_size/1024),bif_row,bif_column++);
 #ifdef NO_PRINT_LLD
-		if(!silent) printf("  %c%ld%c",'"',rec_size/1024,'"');
+		if(!silent) printf("  %c%ld%c",'"',(long)(rec_size/1024),'"');
 #else
-		if(!silent) printf("  %c%lld%c",'"',rec_size/1024,'"');
+		if(!silent) printf("  %c%lld%c",'"',(long long)(rec_size/1024),'"');
 #endif
 	}
 	if(!silent) printf("\n");
@@ -11707,9 +12147,9 @@ long long who;
 		do_float(bif_fd,(double)(current_file_size),bif_row,bif_column++);
 	}
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%c%ld%c  ",'"',current_file_size,'"');
+	if(!silent) printf("%c%ld%c  ",'"',(long)current_file_size,'"');
 #else
-	if(!silent) printf("%c%lld%c  ",'"',current_file_size,'"');
+	if(!silent) printf("%c%lld%c  ",'"',(long long)current_file_size,'"');
 #endif
 	for(i=0;i<=max_y;i++){
 		if(report_array[0][i] != current_file_size){
@@ -11722,17 +12162,17 @@ long long who;
 				do_float(bif_fd,(double)(current_file_size),bif_row,bif_column++);
 			}
 #ifdef NO_PRINT_LLD
-			if(!silent) printf("%c%ld%c  ",'"',current_file_size,'"');
+			if(!silent) printf("%c%ld%c  ",'"',(long)current_file_size,'"');
 #else
-			if(!silent) printf("%c%lld%c  ",'"',current_file_size,'"');
+			if(!silent) printf("%c%lld%c  ",'"',(long long)current_file_size,'"');
 #endif
 		}
 		if(bif_flag)
 			do_float(bif_fd,(double)(report_array[who][i]),bif_row,bif_column++);
 #ifdef NO_PRINT_LLD
-		if(!silent) printf(" %ld ",report_array[who][i]);
+		if(!silent) printf(" %ld ",(long)report_array[who][i]);
 #else
-		if(!silent) printf(" %lld ",report_array[who][i]);
+		if(!silent) printf(" %lld ",(long long)report_array[who][i]);
 #endif
 	}
 	if(bif_flag)
@@ -11919,9 +12359,9 @@ long long who;
 		if (bif_flag)
 			do_float(bif_fd, (double)(rec_size/1024), bif_row, bif_column++);
 #ifdef NO_PRINT_LLD
-		if(!silent) printf("  %c%ld%c",'"',rec_size/1024,'"');
+		if(!silent) printf("  %c%ld%c",'"',(long)(rec_size/1024),'"');
 #else
-		if(!silent) printf("  %c%lld%c",'"',rec_size/1024,'"');
+		if(!silent) printf("  %c%lld%c",'"',(long long)(rec_size/1024),'"');
 #endif
 	}
 	if(!silent) printf("\n");
@@ -11937,9 +12377,9 @@ long long who;
 		do_float(bif_fd, (double)(current_file_size), bif_row, bif_column++);
 	}
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("%c%ld%c  ",'"',current_file_size,'"');
+	if(!silent) printf("%c%ld%c  ",'"',(long)current_file_size,'"');
 #else
-	if(!silent) printf("%c%lld%c  ",'"',current_file_size,'"');
+	if(!silent) printf("%c%lld%c  ",'"',(long long)current_file_size,'"');
 #endif
 	for (i = 0; i <= max_y; i++) {
 		if (report_array[0][i] != current_file_size) {
@@ -11952,9 +12392,9 @@ long long who;
 				do_float(bif_fd, (double)(current_file_size), bif_row, bif_column++);
 			}
 #ifdef NO_PRINT_LLD
-			if(!silent) printf("%c%ld%c  ",'"',current_file_size,'"');
+			if(!silent) printf("%c%ld%c  ",'"',(long)current_file_size,'"');
 #else
-			if(!silent) printf("%c%lld%c  ",'"',current_file_size,'"');
+			if(!silent) printf("%c%lld%c  ",'"',(long long)current_file_size,'"');
 #endif
 		}
 		if (bif_flag)
@@ -12125,7 +12565,9 @@ int shared_flag;
 {
 	long long size1;
 	char *addr,*dumb;
+#ifdef SHARED_MEM
 	int shmid;
+#endif
 	int tfd;
 	long long tmp;
 #if defined(solaris) 
@@ -12162,9 +12604,9 @@ int shared_flag;
         {
                 printf("\nUnable to get shared memory segment(shmget)\n");
 #ifdef NO_PRINT_LLD
-                printf("shmid = %d, size = %ld, size1 = %lu, Error %d\n",shmid,size,(size_t)size1,errno);
+                printf("shmid = %d, size = %ld, size1 = %lu, Error %d\n",shmid,(long)size,(size_t)size1,errno);
 #else
-                printf("shmid = %d, size = %lld, size1 = %lu, Error %d\n",shmid,size,(unsigned long)size1,errno);
+                printf("shmid = %d, size = %lld, size1 = %lu, Error %d\n",shmid,(long long)size,(unsigned long)size1,errno);
 #endif
                 exit(119);
         }
@@ -12247,7 +12689,7 @@ int shared_flag;
 		exit(122);
 	}
 	if(debug1)
-		printf("Got shared memory for size %d\n",size1);
+		printf("Got shared memory for size %lld\n",size1);
 
 	return(addr);
 #endif
@@ -12406,7 +12848,7 @@ purge_buffer_cache()
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_write_test(void *x)
+thread_write_test(int x)
 #else
 void *
 thread_write_test( x)
@@ -12455,6 +12897,7 @@ thread_write_test( x)
 #else
 	long long *gc=0;
 #endif
+	double burst_acc_time_sec = 0;
 
 	if(compute_flag)
 		delay=compute_time;
@@ -12513,19 +12956,18 @@ thread_write_test( x)
 		nbuff=buffer;
 	if(debug1 )
 	{
-	   if(use_thread)
+	    if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
-	   else
+	    else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
-		
 	}
 	dummyfile[xx]=(char *)malloc((size_t)MAXNAMESIZE);
 	xx2=xx;
@@ -12534,17 +12976,17 @@ thread_write_test( x)
 	if(mfflag)
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s",filearray[xx2]);
+	    sprintf(dummyfile[xx],"%s",filearray[xx2]);
 #else
-		sprintf(dummyfile[xx],"%s",filearray[xx2]);
+	    sprintf(dummyfile[xx],"%s",filearray[xx2]);
 #endif
 	}
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+	    sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+	    sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	/*****************/
@@ -12608,7 +13050,7 @@ thread_write_test( x)
 		if(distributed && client_iozone)
 			send_stop();
 		printf("\nCan not open temp file: %s\n", 
-			filename);
+			dummyfile[xx]);
 		perror("open");
 		exit(125);
 	}
@@ -12655,7 +13097,7 @@ thread_write_test( x)
 	}
 	if(fetchon)			/* Prefetch into processor cache */
 		fetchit(nbuff,reclen);
-	if((verify && !no_copy_flag) || dedup || dedup_interior)
+	if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 		fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 
 	if(w_traj_flag)
@@ -12759,7 +13201,7 @@ thread_write_test( x)
 			mylockr((int) fd, (int) 1, (int)0,
 			  lock_offset, reclen);
 		}
-		if((verify && !no_copy_flag) || dedup || dedup_interior)
+		if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 		if(compute_flag)
 			compute_val+=do_compute(delay);
@@ -12778,7 +13220,7 @@ thread_write_test( x)
 			  close(fd);
 			}
 			child_stat->throughput = 
-				(time_so_far() - starttime1)-time_res;
+				(time_so_far() - starttime1)-time_res - burst_acc_time_sec;
 			if(include_close)
 			{
 			  if((fd = I_OPEN(dummyfile[xx], (int)flags,0))<0)
@@ -12787,7 +13229,7 @@ thread_write_test( x)
 				if(distributed && client_iozone)
 					send_stop();
 				printf("\nCan not open temp file: %s\n", 
-					filename);
+					dummyfile[xx]);
 				perror("open");
 				exit(125);
 			  }
@@ -12842,7 +13284,7 @@ again:
 			     {
 				free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 				nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 			        async_write_no_copy(gc, (long long)fd, nbuff, reclen, (i*reclen), depth,free_addr);
 			     }
@@ -12860,6 +13302,11 @@ again:
 		      {
 #endif
 		      wval=write(fd, nbuff, (size_t) reclen);
+
+#ifndef NO_THREADS
+		      count_burst(&burst_acc_time_sec, xx);
+#endif
+
 #if defined(Windows)
 		      }
 #endif
@@ -12875,7 +13322,7 @@ again:
 				}
 				temp_time = time_so_far();
 				child_stat->throughput = 
-					(temp_time - starttime1)-time_res;
+					(temp_time - starttime1)-time_res - burst_acc_time_sec;
 				if(child_stat->throughput < (double).000001) 
 				{
 					child_stat->throughput= time_res;
@@ -12905,10 +13352,10 @@ again:
 			   complete.
 			*/
 #ifdef NO_PRINT_LLD
-		    	printf("\nError writing block %ld, fd= %d\n", i,
+		    	printf("\nError writing block %ld, fd= %d\n", (long)i,
 				 fd);
 #else
-		    	printf("\nError writing block %lld, fd= %d\n", i,
+		    	printf("\nError writing block %lld, fd= %d\n", (long long)i,
 				 fd);
 #endif
 			if(wval==-1)
@@ -12945,9 +13392,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
 		w_traj_ops_completed++;
@@ -13005,9 +13452,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	if(!stopped){
 		temp_time = time_so_far();
 		if(inc_think)
-		   child_stat->throughput = ((temp_time - starttime1)-time_res);
+		   child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec);
 		else
-		   child_stat->throughput = ((temp_time - starttime1)-time_res)
+		   child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec)
 			-compute_val;
 		if(child_stat->throughput < (double).000001) 
 		{
@@ -13049,11 +13496,11 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 			
 	if (debug1) {
 #ifdef NO_PRINT_LLD
-		printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+		printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n", (long)xx,
 #else
-		printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+		printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n", (long long)xx,
 #endif
-			xx, walltime, cputime,
+			walltime, cputime,
 			cpu_util(cputime, walltime));
 	}
 	child_stat->flag = CHILD_STATE_HOLD; /* Tell parent I'm done */
@@ -13063,9 +13510,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	/*******************************************************************/
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 	if(!include_close)
 	{
@@ -13116,7 +13563,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_pwrite_test(void *x)
+thread_pwrite_test(int x)
 #else
 void *
 thread_pwrite_test( x)
@@ -13223,15 +13670,15 @@ thread_pwrite_test( x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -13250,9 +13697,9 @@ thread_pwrite_test( x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-	   sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+	   sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-	   sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+	   sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	/*****************/
@@ -13301,7 +13748,7 @@ thread_pwrite_test( x)
 		if(distributed && client_iozone)
 			send_stop();
 		printf("\nCan not open temp file: %s\n", 
-			filename);
+			dummyfile[xx]);
 		perror("open");
 		exit(125);
 	}
@@ -13345,7 +13792,7 @@ thread_pwrite_test( x)
 	}
 	if(fetchon)			/* Prefetch into processor cache */
 		fetchit(nbuff,reclen);
-	if((verify && !no_copy_flag) || dedup || dedup_interior)
+	if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 		fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 
 	if(w_traj_flag)
@@ -13435,7 +13882,7 @@ thread_pwrite_test( x)
 			mylockr((int) fd, (int) 1, (int)0,
 			  lock_offset, reclen);
 		}
-		if((verify && !no_copy_flag) || dedup || dedup_interior)
+		if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 		if(compute_flag)
 			compute_val+=do_compute(delay);
@@ -13502,7 +13949,7 @@ again:
 			     {
 				free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 				nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 			        async_write_no_copy(gc, (long long)fd, nbuff, reclen, (traj_offset), depth,free_addr);
 			     }
@@ -13554,10 +14001,10 @@ again:
 			   complete.
 			*/
 #ifdef NO_PRINT_LLD
-		    	printf("\nError pwriting block %ld, fd= %d\n", i,
+		    	printf("\nError pwriting block %ld, fd= %d\n", (long)i,
 				 fd);
 #else
-		    	printf("\nError pwriting block %lld, fd= %d\n", i,
+		    	printf("\nError pwriting block %lld, fd= %d\n", (long long)i,
 				 fd);
 #endif
 			if(wval==-1)
@@ -13599,9 +14046,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
 		w_traj_ops_completed++;
@@ -13693,12 +14140,11 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 			
 	if (debug1) {
 #ifdef NO_PRINT_LLD
-		printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+		printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",(long)xx,
 #else
-		printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+		printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",(long long)xx,
 #endif
-			xx, walltime, cputime,
-			cpu_util(cputime, walltime));
+			walltime, cputime, cpu_util(cputime, walltime));
 	}
 	child_stat->flag = CHILD_STATE_HOLD; /* Tell parent I'm done */
 	stopped=0;
@@ -13707,9 +14153,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	/*******************************************************************/
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 	if(!include_close)
 	{
@@ -13755,7 +14201,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_rwrite_test(void *x)
+thread_rwrite_test(int x)
 #else
 void *
 thread_rwrite_test(x)
@@ -13802,6 +14248,8 @@ thread_rwrite_test(x)
 #else
 	long long *gc=0;
 #endif
+
+	double burst_acc_time_sec = 0;
 
 	if(compute_flag)
 		delay=compute_time;
@@ -13862,15 +14310,15 @@ thread_rwrite_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -13889,9 +14337,9 @@ thread_rwrite_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	flags = O_RDWR;
@@ -13936,9 +14384,9 @@ thread_rwrite_test(x)
 		if(distributed && client_iozone)
 			send_stop();
 #ifdef NO_PRINT_LLD
-		printf("\nChild %ld\n",xx);
+		printf("\nChild %ld\n",(long)xx);
 #else
-		printf("\nChild %lld\n",xx);
+		printf("\nChild %lld\n",(long long)xx);
 #endif
 		child_stat->flag = CHILD_STATE_HOLD;
 		perror(dummyfile[xx]);
@@ -14051,7 +14499,7 @@ thread_rwrite_test(x)
 	}
 	if(w_traj_flag)
 		rewind(w_traj_fd);
-	if((verify && !no_copy_flag) || dedup || dedup_interior)
+	if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 		fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 	for(i=0; i<numrecs64; i++){
 		traj_offset= i*reclen ;
@@ -14089,7 +14537,7 @@ thread_rwrite_test(x)
 				printf("\nStop_flag 1\n");
 			break;
 		}
-		if((verify && !no_copy_flag) || dedup || dedup_interior)
+		if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 		{
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 		}
@@ -14105,9 +14553,9 @@ thread_rwrite_test(x)
 			if(cdebug)
 			{
 #ifdef NO_PRINT_LLD
-fprintf(newstdout,"Chid: %ld Rewriting offset %ld for length of %ld\n",chid, i*reclen,reclen);
+fprintf(newstdout,"Chid: %ld Rewriting offset %ld for length of %ld\n",(long)chid,(long)(i*reclen),(long)reclen);
 #else
-fprintf(newstdout,"Chid: %lld Rewriting offset %lld for length of %lld\n",chid, i*reclen,reclen);
+fprintf(newstdout,"Chid: %lld Rewriting offset %lld for length of %lld\n",(long long)chid,(long long)(i*reclen),(long long)reclen);
 #endif
 			  fflush(newstdout);
 			}
@@ -14128,7 +14576,7 @@ fprintf(newstdout,"Chid: %lld Rewriting offset %lld for length of %lld\n",chid, 
 			     {
 				free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 				nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,i);
 			        async_write_no_copy(gc, (long long)fd, nbuff, reclen, (i*reclen), depth,free_addr);
 			     }
@@ -14145,6 +14593,10 @@ fprintf(newstdout,"Chid: %lld Rewriting offset %lld for length of %lld\n",chid, 
 			   else
 #endif
 			   wval=write(fd, nbuff, (size_t) reclen);
+
+#ifndef NO_THREADS
+			   count_burst(&burst_acc_time_sec, xx);
+#endif
 			   if(wval != reclen)
 			   {
 				if(*stop_flag)
@@ -14154,10 +14606,10 @@ fprintf(newstdout,"Chid: %lld Rewriting offset %lld for length of %lld\n",chid, 
 					break;
 				}
 #ifdef NO_PRINT_LLD
-		    		printf("\nError writing block %ld, fd= %d\n", i,
+		    		printf("\nError writing block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-		    		printf("\nError writing block %lld, fd= %d\n", i,
+		    		printf("\nError writing block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				if(wval==-1)
@@ -14203,9 +14655,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_rwqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_rwqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_rwqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_rwqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
 		if(rlocking)
@@ -14248,9 +14700,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	temp_time=time_so_far();
 	child_stat=(struct child_stats *)&shmaddr[xx];
 	if(inc_think)
-		child_stat->throughput = ((temp_time - starttime1)-time_res);
+		child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec);
 	else
-		child_stat->throughput = ((temp_time - starttime1)-time_res)
+		child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec)
 		-compute_val;
 	if(child_stat->throughput < (double).000001) 
 	{
@@ -14320,9 +14772,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		fclose(w_traj_fd);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild Stopping  %ld\n",xx);
+		printf("\nChild Stopping  %ld\n",(long)xx);
 #else
-		printf("\nChild Stopping  %lld\n",xx);
+		printf("\nChild Stopping  %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -14351,7 +14803,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_read_test(void *x)
+thread_read_test(int x)
 #else
 void *
 thread_read_test(x)
@@ -14465,9 +14917,9 @@ thread_read_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	if(oflag)
@@ -14554,15 +15006,15 @@ thread_read_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -14717,10 +15169,10 @@ thread_read_test(x)
 					break;
 				}
 #ifdef NO_PRINT_LLD
-		    		printf("\nError reading block %ld, fd= %d\n", i,
+		    		printf("\nError reading block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-		    		printf("\nError reading block %lld, fd= %d\n", i,
+		    		printf("\nError reading block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				perror("read");
@@ -14792,9 +15244,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_rqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_rqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 
@@ -14907,9 +15359,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		fclose(r_traj_fd);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -14939,7 +15391,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_pread_test(void *x)
+thread_pread_test(int x)
 #else
 void *
 thread_pread_test(x)
@@ -15043,9 +15495,9 @@ thread_pread_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	if(oflag)
@@ -15115,15 +15567,15 @@ thread_pread_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -15252,10 +15704,10 @@ thread_pread_test(x)
 					break;
 				}
 #ifdef NO_PRINT_LLD
-		    		printf("\nError preading block %ld, fd= %d\n", i,
+		    		printf("\nError preading block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-		    		printf("\nError preading block %lld, fd= %d\n", i,
+		    		printf("\nError preading block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				perror("pread");
@@ -15327,9 +15779,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_rqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_rqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 
@@ -15432,9 +15884,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		fclose(r_traj_fd);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -15465,7 +15917,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_rread_test(void *x)
+thread_rread_test(int x)
 #else
 void *
 thread_rread_test(x)
@@ -15570,15 +16022,15 @@ thread_rread_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -15597,9 +16049,9 @@ thread_rread_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	if(oflag)
@@ -15830,10 +16282,10 @@ thread_rread_test(x)
 					break;
 				}
 #ifdef NO_PRINT_LLD
-		    		printf("\nError writing block %ld, fd= %d\n", i,
+		    		printf("\nError writing block %ld, fd= %d\n", (long)i,
 					 fd);
 #else
-		    		printf("\nError writing block %lld, fd= %d\n", i,
+		    		printf("\nError writing block %lld, fd= %d\n", (long long)i,
 					 fd);
 #endif
 				perror("read");
@@ -15905,9 +16357,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_rrqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rrqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_rrqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_rrqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 
@@ -16047,7 +16499,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_reverse_read_test(void *x)
+thread_reverse_read_test(int x)
 #else
 void *
 thread_reverse_read_test(x)
@@ -16381,9 +16833,9 @@ thread_reverse_read_test(x)
 					break;
 				}
 #ifdef NO_PRINT_LLD
-				printf("\nError reading block %ld\n", i); 
+				printf("\nError reading block %ld\n", (long)i); 
 #else
-				printf("\nError reading block %lld\n", i); 
+				printf("\nError reading block %lld\n", (long long)i); 
 #endif
 				perror("read");
 				if (!no_unlink)
@@ -16463,9 +16915,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_revqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_revqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_revqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_revqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 	}
@@ -16550,9 +17002,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 fclose(thread_revqfd);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -16581,7 +17033,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_stride_read_test(void *x)
+thread_stride_read_test(int x)
 #else
 void *
 thread_stride_read_test(x)
@@ -16674,15 +17126,15 @@ thread_stride_read_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -16701,9 +17153,9 @@ thread_stride_read_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	if(oflag)
@@ -16891,9 +17343,9 @@ thread_stride_read_test(x)
 					break;
 				}
 #ifdef NO_PRINT_LLD
-		    		printf("\nError reading block %ld, fd= %d\n", i, fd);
+		    		printf("\nError reading block %ld, fd= %d\n", (long)i, fd);
 #else
-		    		printf("\nError reading block %lld, fd= %d\n", i, fd);
+		    		printf("\nError reading block %lld, fd= %d\n", (long long)i, fd);
 #endif
 				perror("read");
 				if (!no_unlink)
@@ -17008,9 +17460,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_strqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_strqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_strqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_strqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 	}
@@ -17097,9 +17549,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	free(dummyfile[xx]);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -17129,7 +17581,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_mix_test(void *x)
+thread_mix_test(int x)
 #else
 void *
 thread_mix_test(x)
@@ -17178,16 +17630,16 @@ thread_mix_test(x)
 	if(selector==0)
 	{
 		if(seq_mix)
-			thread_read_test(x);
+			thread_read_test((int)x);
 		else
-			thread_ranread_test(x);
+			thread_ranread_test((int)x);
 	}
 	else
 	{
 		if(seq_mix)
-			thread_write_test(x);
+			thread_write_test((int)x);
 		else
-			thread_ranwrite_test(x);
+			thread_ranwrite_test((int)x);
 	}
 	return(0);
 }
@@ -17196,10 +17648,11 @@ thread_mix_test(x)
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_ranread_test(void *x)
+thread_ranread_test(int x)
 #else
 void *
 thread_ranread_test(x)
+void *x;
 #endif
 {
 	long long xx,xx2;
@@ -17269,7 +17722,7 @@ thread_ranread_test(x)
             for(i = 0; i < numrecs64; i++){
                 recnum[i] = i;
             }
-            for(i = 0; i < numrecs64; i++) {
+            for(i = numrecs64-1; i >= 0; i--) {
                 long long tmp = recnum[i];
 #ifdef MERSENNE
       	       big_rand = genrand64_int64();
@@ -17290,7 +17743,7 @@ thread_ranread_test(x)
 #endif
 #endif
 #endif
-               big_rand = big_rand%numrecs64;
+               big_rand = big_rand % (i+1);
                tmp = recnum[i];
                recnum[i] = recnum[big_rand];
                recnum[big_rand] = tmp;
@@ -17356,9 +17809,9 @@ thread_ranread_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	if(oflag)
@@ -17444,15 +17897,15 @@ thread_ranread_test(x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -17614,10 +18067,10 @@ thread_ranread_test(x)
 				}
 #ifdef NO_PRINT_LLD
 				printf("\nError reading block at %ld\n",
-					 offset); 
+					 (long)offset); 
 #else
 				printf("\nError reading block at %lld\n",
-					 offset); 
+					 (long long)offset); 
 #endif
 				perror("ranread");
 				if (!no_unlink)
@@ -17692,9 +18145,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
                 {
                         thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-                        fprintf(thread_randrfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_randrfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-                        fprintf(thread_randrfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+                        fprintf(thread_randrfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
                 }
 	}
@@ -17786,9 +18239,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	free(dummyfile[xx]);
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 
 	if(L_flag)
@@ -17819,7 +18272,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_ranwrite_test(void *x)
+thread_ranwrite_test(int x)
 #else
 void *
 thread_ranwrite_test( x)
@@ -17877,6 +18330,8 @@ thread_ranwrite_test( x)
         unsigned long long init[4]={0x12345ULL, 0x23456ULL, 0x34567ULL, 0x45678ULL}, length=4;
 #endif
 
+        double burst_acc_time_sec = 0;
+
 	if(compute_flag)
 		delay=compute_time;
 	hist_time=thread_qtime_stop=thread_qtime_start=0;
@@ -17906,7 +18361,7 @@ thread_ranwrite_test( x)
             for(i = 0; i < numrecs64; i++){
                 recnum[i] = i;
             }
-            for(i = 0; i < numrecs64; i++) {
+            for(i = numrecs64-1; i >= 0; i--) {
                 long long tmp = recnum[i];
 #ifdef MERSENNE
       	       big_rand = genrand64_int64();
@@ -17927,7 +18382,7 @@ thread_ranwrite_test( x)
 #endif
 #endif
 #endif
-               big_rand = big_rand%numrecs64;
+               big_rand = big_rand % (i+1);
                tmp = recnum[i];
                recnum[i] = recnum[big_rand];
                recnum[big_rand] = tmp;
@@ -17977,15 +18432,15 @@ thread_ranwrite_test( x)
 	{
 	   if(use_thread)
 #ifdef NO_PRINT_LLD
-		printf("\nStarting child %ld\n",xx);
+		printf("\nStarting child %ld\n",(long)xx);
 #else
-		printf("\nStarting child %lld\n",xx);
+		printf("\nStarting child %lld\n",(long long)xx);
 #endif
 	   else
 #ifdef NO_PRINT_LLD
-		printf("\nStarting process %d slot %ld\n",getpid(),xx);
+		printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-		printf("\nStarting process %d slot %lld\n",getpid(),xx);
+		printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 		
 	}
@@ -18004,9 +18459,9 @@ thread_ranwrite_test( x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx2],(long)xx2);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],xx2);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx2],(long long)xx2);
 #endif
 	}
 	/*****************/
@@ -18054,7 +18509,7 @@ thread_ranwrite_test( x)
 		if(distributed && client_iozone)
 			send_stop();
 		printf("\nCan not open temp file: %s\n", 
-			filename);
+			dummyfile[xx]);
 		perror("open");
 		exit(125);
 	}
@@ -18151,7 +18606,7 @@ thread_ranwrite_test( x)
 		fprintf(thread_Lwqfd,"%-25s %s","Random write start: ",
 			now_string);
 	}
-	if((verify && !no_copy_flag) || dedup || dedup_interior)
+	if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 		fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)0);
 	starttime1 = time_so_far();
 	if(cpuutilflag)
@@ -18206,7 +18661,7 @@ thread_ranwrite_test( x)
 			mylockr((int) fd, (int) 1, (int)0,
 			  lock_offset, reclen);
 		}
-		if((verify && !no_copy_flag) || dedup || dedup_interior)
+		if((verify && !no_copy_flag) || dedup_flag || dedup_iflag)
 			fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)(current_offset/reclen));
 		if(*stop_flag && !stopped){
 			if(include_flush)
@@ -18217,7 +18672,7 @@ thread_ranwrite_test( x)
 					fsync(fd);
 			}
 			child_stat->throughput = 
-				(time_so_far() - starttime1)-time_res;
+				(time_so_far() - starttime1)-time_res - burst_acc_time_sec;
 			if(child_stat->throughput < (double).000001) 
 			{
 				child_stat->throughput = time_res;
@@ -18266,7 +18721,7 @@ again:
 			     {
 				free_addr=nbuff=(char *)malloc((size_t)reclen+page_size);
 				nbuff=(char *)(((long)nbuff+(long)page_size) & (long)~(page_size-1));
-				if(verify || dedup || dedup_interior)
+				if(verify || dedup_flag || dedup_iflag)
 					fill_buffer(nbuff,reclen,(long long)pattern,sverify,(long long)(current_offset/reclen));
 			        async_write_no_copy(gc, (long long)fd, nbuff, reclen, (current_offset), depth,free_addr);
 			     }
@@ -18276,6 +18731,11 @@ again:
 		   else
 		   {
 		      wval = write(fd, nbuff, (size_t) reclen);
+
+#ifndef NO_THREADS
+		      count_burst(&burst_acc_time_sec, xx);
+#endif
+
 		      if(wval != reclen)
 		      {
 			if(*stop_flag && !stopped){
@@ -18288,7 +18748,7 @@ again:
 				}
 				temp_time = time_so_far();
 				child_stat->throughput = 
-					(temp_time - starttime1)-time_res;
+					(temp_time - starttime1)-time_res - burst_acc_time_sec;
 				if(child_stat->throughput < (double).000001) 
 				{
 					child_stat->throughput= time_res;
@@ -18318,10 +18778,10 @@ again:
 			   complete.
 			*/
 #ifdef NO_PRINT_LLD
-		    	printf("\nError writing block %ld, fd= %d\n", i,
+		    	printf("\nError writing block %ld, fd= %d\n", (long)i,
 				 fd);
 #else
-		    	printf("\nError writing block %lld, fd= %d\n", i,
+		    	printf("\nError writing block %lld, fd= %d\n", (long long)i,
 				 fd);
 #endif
 			if(wval==-1)
@@ -18363,9 +18823,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_randwqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_randwqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_randwqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_randwqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
 		w_traj_ops_completed++;
@@ -18413,9 +18873,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	if(!stopped){
 		temp_time = time_so_far();
 		if(inc_think)
-			child_stat->throughput = ((temp_time - starttime1)-time_res);
+			child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec);
 		else
-			child_stat->throughput = ((temp_time - starttime1)-time_res)
+			child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec)
 				-compute_val;
 		if(child_stat->throughput < (double).000001) 
 		{
@@ -18461,9 +18921,9 @@ printf("Desired rate %g  Actual rate %g Nap %g microseconds\n",desired_op_rate_t
 	/*******************************************************************/
 	if(debug1)
 #ifdef NO_PRINT_LLD
-		printf("\nChild finished %ld\n",xx);
+		printf("\nChild finished %ld\n",(long)xx);
 #else
-		printf("\nChild finished %lld\n",xx);
+		printf("\nChild finished %lld\n",(long long)xx);
 #endif
 	if(!include_close)
 	{
@@ -18512,7 +18972,7 @@ return(0);
 /************************************************************************/
 #ifdef HAVE_ANSIC_C
 void *
-thread_cleanup_test(void *x)
+thread_cleanup_test(int x)
 #else
 void *
 thread_cleanup_test(x)
@@ -18545,9 +19005,9 @@ thread_cleanup_test(x)
 	else
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx],xx);
+		sprintf(dummyfile[xx],"%s.DUMMY.%ld",filearray[xx],(long)xx);
 #else
-		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx],xx);
+		sprintf(dummyfile[xx],"%s.DUMMY.%lld",filearray[xx],(long long)xx);
 #endif
 	}
 	if(!no_unlink)
@@ -18604,58 +19064,62 @@ return(0);
 /************************************************************************/
 #ifndef NO_THREADS
 #ifdef HAVE_ANSIC_C
-long long 
-mythread_create( void *(*func)(void *),void *x)
+long long mythread_create( void *(*func)(void *),int x)
 #else
 long long 
 mythread_create( func,x)
-void *(*func)(void *);
-void *x;
+void *func;
+int x;
 #endif
 {
 	pthread_t ts;
 	pthread_attr_t attr;
 	int xx;
-	int *yy;
-#ifdef _64BIT_ARCH_
 	long long meme;
-	meme = (long long)x;
-#else
-	long meme;
-	meme = (long)x;
-#endif
-	yy=(int *)x;
+	void *myptr;
+	char foo[10];
+/*
+mythread_create( void *(*func)(void *),int x)
+*/
 
+	/* DAMN COMPILERS !!! */
+	sprintf(foo,"%x",x);
+	sscanf(foo,"%llx",&meme);
+	sscanf(foo,"%p",&myptr);
 
 #ifdef OSFV3
 	
 	xx=(int )pthread_create(&ts, pthread_attr_default,
-		func, (void *)yy);
+		(void *)(func), myptr);
 
 #else
 	pthread_attr_init(&attr);
 	xx=(int )pthread_create((pthread_t *)&ts, (pthread_attr_t *) &attr,
-		func, (void *)yy);
+		(void *(*)(void *))(func), myptr);
 #endif
 	bcopy(&ts,&p_childids[meme],sizeof(pthread_t));
 	if(xx < (int)0)
 		printf("Thread create failed. Returned %d Errno = %d\n",xx,errno);
 	if(debug1 )
 	{
-		printf("\nthread created has an id of %lx\n",ts);
-		printf("meme %ld\n",meme);
+		printf("\nthread created has an id of %p\n",(void *)&ts);
+#ifdef NO_PRINT_LLD
+		printf("meme %ld\n",(long)meme);
+#else
+		printf("meme %lld\n",(long long)meme);
+#endif
 	}
 	return((long long)meme);
 }
 #else
 #ifdef HAVE_ANSIC_C
 long long 
-mythread_create( void *(*func)(void *),void *x)
+mythread_create( void *(*func)(void *),int x)
 #else
 long long 
-mythread_create( func,x)
+mythread_create( func, x)
 void *(*func)(void *);
-void *x;
+int x;
 #endif
 {
 	printf("This version does not support threads\n");
@@ -18676,7 +19140,9 @@ thread_exit()
 #endif
 {
 	pthread_exit((void *)NULL);
+#if !defined(solaris)
 return(0);
+#endif
 }
 #else
 #ifdef HAVE_ANSIC_C
@@ -18791,17 +19257,17 @@ dump_throughput_cpu()
 	label = OPS_flag ?  "ops/sec" :
 		MS_flag ? "microseconds/op" : "kBytes/sec";
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("\"Record size = %ld kBytes \"\n", reclen/1024);
+	if(!silent) printf("\"Record size = %ld kBytes \"\n", (long)(reclen/1024));
 #else
-	if(!silent) printf("\"Record size = %lld kBytes \"\n", reclen/1024);
+	if(!silent) printf("\"Record size = %lld kBytes \"\n", (long long)(reclen/1024));
 #endif
 	if(!silent) printf("\"Output is in CPU%%\"\n\n");
 	if (bif_flag)
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(print_str, "Record size = %ld kBytes", reclen/1024);
+		sprintf(print_str, "Record size = %ld kBytes", (long)(reclen/1024));
 #else
-		sprintf(print_str, "Record size = %lld kBytes", reclen/1024);
+		sprintf(print_str, "Record size = %lld kBytes", (long long)(reclen/1024));
 #endif
 		do_label(bif_fd, print_str, bif_row++, bif_column);
 		sprintf(print_str, "Output is in CPU%%");
@@ -18870,17 +19336,17 @@ dump_throughput()
 	else
 		label="kBytes/sec";
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("\"Record size = %ld kBytes \"\n",reclen/1024);
+	if(!silent) printf("\"Record size = %ld kBytes \"\n",(long)(reclen/1024));
 #else
-	if(!silent) printf("\"Record size = %lld kBytes \"\n",reclen/1024);
+	if(!silent) printf("\"Record size = %lld kBytes \"\n",(long long)(reclen/1024));
 #endif
 	if(!silent) printf("\"Output is in %s\"\n\n",label);
 	if(bif_flag)
 	{
 #ifdef NO_PRINT_LLD
-		sprintf(print_str,"Record size = %ld kBytes",reclen/1024);
+		sprintf(print_str,"Record size = %ld kBytes",(long)(reclen/1024));
 #else
-		sprintf(print_str,"Record size = %lld kBytes",reclen/1024);
+		sprintf(print_str,"Record size = %lld kBytes",(long long)(reclen/1024));
 #endif
 		do_label(bif_fd,print_str,bif_row++,bif_column);
 		sprintf(print_str,"Output is in %s",label);
@@ -19136,9 +19602,9 @@ long long size;
 {
 	if(munmap(buffer,(size_t)size)<0)
 #ifdef NO_PRINT_LLD
-		printf("munmap buffer %lx, size %ld failed.\n",(long)buffer,size);
+		printf("munmap buffer %lx, size %ld failed.\n",(long)buffer,(long)size);
 #else
-		printf("munmap buffer %lx, size %lld failed.\n",(long)buffer,size);
+		printf("munmap buffer %lx, size %lld failed.\n",(long)buffer,(long long)size);
 #endif
 	
 }
@@ -19627,7 +20093,6 @@ float comp_delay;
 		if(tmptime >= (double)comp_delay)
 			return(tmptime);
 	}
-	return(0.0);
 }
 
 /************************************************************************/
@@ -19743,7 +20208,17 @@ long which;
 #endif
 {
 	long long traj_offset = 0;
+#ifdef NO_PRINT_LLD
+	long tmp1 = 0;
+	long tmp2 = 0;
+	long tmp3 = 0;
+	long tmp4 = 0;
+#else
+	long long tmp1 = 0;
 	long long tmp2 = 0;
+	long long tmp3 = 0;
+	long long tmp4 = 0;
+#endif
 	int tmp = 0;
 	int tokens;
 	int ret=0;
@@ -19778,20 +20253,26 @@ long which;
 	if(tokens == 3)
 	{
 #ifdef NO_PRINT_LLD
-		ret=sscanf(sbuf,"%ld %ld %d\n",&traj_offset,&tmp2,&tmp);
+		ret=sscanf(sbuf,"%ld %ld %d\n",&tmp1,&tmp2,&tmp);
+		traj_offset=(long long)tmp1;
+		*traj_size=(long long)tmp2;
 #else
-		ret=sscanf(sbuf,"%lld %lld %d\n",&traj_offset,&tmp2,&tmp);
+		ret=sscanf(sbuf,"%lld %lld %d\n",&tmp1,&tmp2,&tmp);
+		traj_offset=(long long)tmp1;
+		*traj_size=(long long)tmp2;
 #endif
-	/*printf("\nReading %s trajectory with %d items\n",which?"write":"read",tokens);*/
-		*traj_size=tmp2;
 		*delay= ((float)tmp/1000);
 	}
 	if(tokens == 2)
 	{ 
 #ifdef NO_PRINT_LLD
-		ret=sscanf(sbuf,"%ld %ld\n",&traj_offset,traj_size);
+		ret=sscanf(sbuf,"%ld %ld\n",&tmp3,&tmp4);
+		traj_offset=(long long)tmp3;
+		*traj_size=(long long)tmp4;
 #else
-		ret=sscanf(sbuf,"%lld %lld\n",&traj_offset,traj_size);
+		ret=sscanf(sbuf,"%lld %lld\n",&tmp3,&tmp4);
+		traj_offset=(long long)tmp3;
+		*traj_size=(long long)tmp4;
 #endif
 		*delay=compute_time;
 	/*printf("\nReading %s trajectory with %d items\n",which?"write":"read",tokens);*/
@@ -19808,9 +20289,9 @@ long which;
 	}
 #ifdef DEBUG
 #ifdef NO_PRINT_LLD
-	if(!silent) printf("\nOffset %ld  Size %ld Compute delay %f\n",traj_offset, *traj_size,*delay);
+	if(!silent) printf("\nOffset %ld  Size %ld Compute delay %f\n",(long)traj_offset, (long)(*traj_size),*delay);
 #else
-	if(!silent) printf("\nOffset %lld  Size %lld Compute delay %f\n",traj_offset, *traj_size,*delay);
+	if(!silent) printf("\nOffset %lld  Size %lld Compute delay %f\n",(long long)traj_offset, (long long)(*traj_size),*delay);
 #endif
 #endif
 	return(traj_offset);
@@ -19923,17 +20404,17 @@ r_traj_size()
 		if(tokens==3)
 		{
 #ifdef NO_PRINT_LLD
-			ret=sscanf(sbuf,"%ld %ld %d\n",&traj_offset,&traj_size,&dummy);
+			ret=sscanf(sbuf,"%ld %ld %d\n",(long *)&traj_offset,(long *)&traj_size,&dummy);
 #else
-			ret=sscanf(sbuf,"%lld %lld %d\n",&traj_offset,&traj_size,&dummy);
+			ret=sscanf(sbuf,"%lld %lld %d\n",(long long *)&traj_offset,(long long *)&traj_size,&dummy);
 #endif
 		}
 		if(tokens==2)
 		{
 #ifdef NO_PRINT_LLD
-			ret=sscanf(sbuf,"%ld %ld\n",&traj_offset,&traj_size);
+			ret=sscanf(sbuf,"%ld %ld\n",(long *)&traj_offset,(long *)&traj_size);
 #else
-			ret=sscanf(sbuf,"%lld %lld\n",&traj_offset,&traj_size);
+			ret=sscanf(sbuf,"%lld %lld\n",(long long *)&traj_offset,(long long *)&traj_size);
 #endif
 		}
 		if((tokens != 2) && (tokens !=3))
@@ -19950,9 +20431,9 @@ r_traj_size()
 #ifdef DEBUG
 
 #ifdef NO_PRINT_LLD
-	printf("File size of read %ld Item count %ld\n",r_traj_fsize,r_traj_ops);
+	printf("File size of read %ld Item count %ld\n",(long)r_traj_fsize,(long)r_traj_ops);
 #else
-	printf("File size of read %lld Item count %lld\n",r_traj_fsize,r_traj_ops);
+	printf("File size of read %lld Item count %lld\n",(long long)r_traj_fsize,(long long)r_traj_ops);
 #endif
 
 #endif
@@ -20020,17 +20501,17 @@ w_traj_size()
 		if(tokens==3)
 		{
 #ifdef NO_PRINT_LLD
-			ret=sscanf(sbuf,"%ld %ld %d\n",&traj_offset,&traj_size,&dummy);
+			ret=sscanf(sbuf,"%ld %ld %d\n",(long *)&traj_offset,(long *)&traj_size,&dummy);
 #else
-			ret=sscanf(sbuf,"%lld %lld %d",&traj_offset,&traj_size,&dummy);
+			ret=sscanf(sbuf,"%lld %lld %d",(long long *)&traj_offset,(long long *)&traj_size,&dummy);
 #endif
 		}
 		if(tokens==2)
 		{
 #ifdef NO_PRINT_LLD
-			ret=sscanf(sbuf,"%ld %ld\n",&traj_offset,&traj_size);
+			ret=sscanf(sbuf,"%ld %ld\n",(long *)&traj_offset,(long *)&traj_size);
 #else
-			ret=sscanf(sbuf,"%lld %lld\n",&traj_offset,&traj_size);
+			ret=sscanf(sbuf,"%lld %lld\n",(long long *)&traj_offset,(long long *)&traj_size);
 #endif
 		}
 		if(tokens > 3)
@@ -20047,9 +20528,9 @@ w_traj_size()
 	w_traj_fsize=max_offset;
 #ifdef DEBUG
 #ifdef NO_PRINT_LLD
-	printf("File size of write %ld Item count %ld\n",w_traj_fsize,w_traj_ops);
+	printf("File size of write %ld Item count %ld\n",(long)w_traj_fsize,(long)w_traj_ops);
 #else
-	printf("File size of write %lld Item count %lld\n",w_traj_fsize,w_traj_ops);
+	printf("File size of write %lld Item count %lld\n",(long long)w_traj_fsize,(long long)w_traj_ops);
 #endif
 #endif
 	fclose(fd);
@@ -20526,7 +21007,11 @@ again:
         }
         if(mdebug)
           printf("Master in accepting connection\n");
+#if defined(ANDROID)
+        ns=accept((int)s,(struct sockaddr *)addr,(socklen_t *)&me);
+#else
         ns=accept(s,(void *)addr,&me);
+#endif
         if(ns < 0)
         {
                 printf("Master socket %d\n",s);
@@ -20681,9 +21166,9 @@ again:
 	sprintf(outbuf.m_stop_flag,"%d",send_buffer->m_stop_flag);
 	sprintf(outbuf.m_actual,"%f",send_buffer->m_actual);
 #ifdef NO_PRINT_LLD
-	sprintf(outbuf.m_child_flag,"%ld",send_buffer->m_child_flag);
+	sprintf(outbuf.m_child_flag,"%ld",(long)(send_buffer->m_child_flag));
 #else
-	sprintf(outbuf.m_child_flag,"%lld",send_buffer->m_child_flag);
+	sprintf(outbuf.m_child_flag,"%lld",(long long)(send_buffer->m_child_flag));
 #endif
 	rc=write(child_socket_val,&outbuf,sizeof(struct master_neutral_command));
         if (rc < 0) {
@@ -20751,7 +21236,13 @@ int send_size;
 	sprintf(outbuf.c_sverify,"%d",send_buffer->c_sverify);
 	sprintf(outbuf.c_odsync,"%d",send_buffer->c_odsync);
 	sprintf(outbuf.c_diag_v,"%d",send_buffer->c_diag_v);
+	sprintf(outbuf.c_zero_pct,"%d",send_buffer->c_zero_pct);
+	sprintf(outbuf.c_N_special,"%d",send_buffer->c_N_special);
+	sprintf(outbuf.c_dedup_granule_size,"%d",send_buffer->c_dedup_granule_size);
 	sprintf(outbuf.c_dedup,"%d",send_buffer->c_dedup);
+	sprintf(outbuf.c_dedup_flag,"%d",send_buffer->c_dedup_flag);
+	sprintf(outbuf.c_dedup_iflag,"%d",send_buffer->c_dedup_iflag);
+	sprintf(outbuf.c_dedup_bflag,"%d",send_buffer->c_dedup_bflag);
 	sprintf(outbuf.c_dedup_interior,"%d",send_buffer->c_dedup_interior);
 	sprintf(outbuf.c_dedup_compress,"%d",send_buffer->c_dedup_compress);
 	sprintf(outbuf.c_dedup_mseed,"%d",send_buffer->c_dedup_mseed);
@@ -20801,27 +21292,27 @@ int send_size;
 	sprintf(outbuf.c_restf,"%d",send_buffer->c_restf);
 	sprintf(outbuf.c_mygen,"%d",send_buffer->c_mygen);
 #ifdef NO_PRINT_LLD
-	sprintf(outbuf.c_stride,"%ld",send_buffer->c_stride);
-	sprintf(outbuf.c_rest_val,"%ld",send_buffer->c_rest_val);
-	sprintf(outbuf.c_delay,"%ld",send_buffer->c_delay);
-	sprintf(outbuf.c_purge,"%ld",send_buffer->c_purge);
-	sprintf(outbuf.c_fetchon,"%ld",send_buffer->c_fetchon);
-	sprintf(outbuf.c_numrecs64,"%ld",send_buffer->c_numrecs64);
-	sprintf(outbuf.c_reclen,"%ld",send_buffer->c_reclen);
-	sprintf(outbuf.c_child_flag,"%ld",send_buffer->c_child_flag);
-	sprintf(outbuf.c_delay_start,"%ld",send_buffer->c_delay_start);
-	sprintf(outbuf.c_depth,"%ld",send_buffer->c_depth);
+	sprintf(outbuf.c_stride,"%ld"(long)(,send_buffer->c_stride));
+	sprintf(outbuf.c_rest_val,"%ld",(long)(send_buffer->c_rest_val));
+	sprintf(outbuf.c_delay,"%ld",(long)(send_buffer->c_delay));
+	sprintf(outbuf.c_purge,"%ld",(long)(send_buffer->c_purge));
+	sprintf(outbuf.c_fetchon,"%ld",(long)(send_buffer->c_fetchon));
+	sprintf(outbuf.c_numrecs64,"%ld",(long)(send_buffer->c_numrecs64));
+	sprintf(outbuf.c_reclen,"%ld",(long)(send_buffer->c_reclen));
+	sprintf(outbuf.c_child_flag,"%ld",(long)(send_buffer->c_child_flag));
+	sprintf(outbuf.c_delay_start,"%ld",(long)(send_buffer->c_delay_start));
+	sprintf(outbuf.c_depth,"%ld",(long)(send_buffer->c_depth));
 #else
-	sprintf(outbuf.c_delay,"%lld",send_buffer->c_delay);
-	sprintf(outbuf.c_stride,"%lld",send_buffer->c_stride);
-	sprintf(outbuf.c_rest_val,"%lld",send_buffer->c_rest_val);
-	sprintf(outbuf.c_purge,"%lld",send_buffer->c_purge);
-	sprintf(outbuf.c_fetchon,"%lld",send_buffer->c_fetchon);
-	sprintf(outbuf.c_numrecs64,"%lld",send_buffer->c_numrecs64);
-	sprintf(outbuf.c_reclen,"%lld",send_buffer->c_reclen);
-	sprintf(outbuf.c_child_flag,"%lld",send_buffer->c_child_flag);
-	sprintf(outbuf.c_delay_start,"%lld",send_buffer->c_delay_start);
-	sprintf(outbuf.c_depth,"%lld",send_buffer->c_depth);
+	sprintf(outbuf.c_delay,"%lld",(long long)(send_buffer->c_delay));
+	sprintf(outbuf.c_stride,"%lld",(long long)(send_buffer->c_stride));
+	sprintf(outbuf.c_rest_val,"%lld",(long long)(send_buffer->c_rest_val));
+	sprintf(outbuf.c_purge,"%lld",(long long)(send_buffer->c_purge));
+	sprintf(outbuf.c_fetchon,"%lld",(long long)(send_buffer->c_fetchon));
+	sprintf(outbuf.c_numrecs64,"%lld",(long long)(send_buffer->c_numrecs64));
+	sprintf(outbuf.c_reclen,"%lld",(long long)(send_buffer->c_reclen));
+	sprintf(outbuf.c_child_flag,"%lld",(long long)(send_buffer->c_child_flag));
+	sprintf(outbuf.c_delay_start,"%lld",(long long)(send_buffer->c_delay_start));
+	sprintf(outbuf.c_depth,"%lld",(long long)(send_buffer->c_depth));
 #endif
 	sprintf(outbuf.c_stop_flag,"%d",send_buffer->c_stop_flag);
 	sprintf(outbuf.c_compute_time,"%f",send_buffer->c_compute_time);
@@ -21020,7 +21511,11 @@ int s,flag;
 		fprintf(newstdout,"Child %d enters accept\n",(int)chid);
 		fflush(newstdout);
 	}
-	ns=accept(s,(void *)addr,&me);
+#if defined(ANDROID)
+        ns=accept((int)s,(struct sockaddr *)addr,(socklen_t *)&me);
+#else
+        ns=accept(s,(void *)addr,&me);
+#endif
 	if(cdebug)
 	{
 		fprintf(newstdout,"Child %d attached for receive. Sock %d  %d\n",
@@ -21483,7 +21978,7 @@ long long numrecs64, reclen;
 	struct master_neutral_command *mnc;
 	char command[512];
 	struct in_addr my_s_addr;
-	char my_port_num[10];
+	char my_port_num[12];
 
 
 	bzero(&cc,sizeof(struct client_command));
@@ -21607,6 +22102,12 @@ long long numrecs64, reclen;
 	cc.c_sverify = sverify;
 	cc.c_odsync = odsync;
 	cc.c_diag_v = diag_v;
+	cc.c_zero_pct = zero_pct;
+	cc.c_N_special = N_special;
+	cc.c_dedup_granule_size = dedup_granule_size;
+	cc.c_dedup_flag = dedup_flag;
+	cc.c_dedup_iflag = dedup_iflag;
+	cc.c_dedup_bflag = dedup_bflag;
 	cc.c_dedup = dedup;
 	cc.c_dedup_interior = dedup_interior;
 	cc.c_dedup_compress = dedup_compress;
@@ -21677,9 +22178,9 @@ long long numrecs64, reclen;
 	 */
 	sscanf(mnc->m_client_number,"%d",&mc.m_client_number);	
 #ifdef NO_PRINT_LLD
-	sscanf(mnc->m_child_flag,"%ld",&mc.m_child_flag);	
+	sscanf(mnc->m_child_flag,"%ld",(long *)&mc.m_child_flag);	
 #else
-	sscanf(mnc->m_child_flag,"%lld",&mc.m_child_flag);	
+	sscanf(mnc->m_child_flag,"%lld",(long long *)&mc.m_child_flag);	
 #endif
 
 	child_index = mc.m_client_number;
@@ -21819,25 +22320,25 @@ become_client()
 	/* 5. Get state information from the master */
 
 #ifdef NO_PRINT_LLD
-	sscanf(cnc->c_numrecs64,"%ld",&cc.c_numrecs64);
-	sscanf(cnc->c_reclen,"%ld",&cc.c_reclen);
-	sscanf(cnc->c_fetchon,"%ld",&cc.c_fetchon);
-	sscanf(cnc->c_purge,"%ld",&cc.c_purge);
-	sscanf(cnc->c_delay,"%ld",&cc.c_delay);
-	sscanf(cnc->c_stride,"%ld",&cc.c_stride);
-	sscanf(cnc->c_rest_val,"%ld",&cc.c_rest_val);
-	sscanf(cnc->c_delay_start,"%ld",&cc.c_delay_start);
-	sscanf(cnc->c_depth,"%ld",&cc.c_depth);
+	sscanf(cnc->c_numrecs64,"%ld",(long *)(&cc.c_numrecs64));
+	sscanf(cnc->c_reclen,"%ld",(long *)(&cc.c_reclen));
+	sscanf(cnc->c_fetchon,"%ld",(long *)(&cc.c_fetchon));
+	sscanf(cnc->c_purge,"%ld",(long *)(&cc.c_purge));
+	sscanf(cnc->c_delay,"%ld",(long *)(&cc.c_delay));
+	sscanf(cnc->c_stride,"%ld",(long *)(&cc.c_stride));
+	sscanf(cnc->c_rest_val,"%ld",(long *)(&cc.c_rest_val));
+	sscanf(cnc->c_delay_start,"%ld",(long *)(&cc.c_delay_start));
+	sscanf(cnc->c_depth,"%ld",(long *)(&cc.c_depth));
 #else
-	sscanf(cnc->c_numrecs64,"%lld",&cc.c_numrecs64);
-	sscanf(cnc->c_reclen,"%lld",&cc.c_reclen);
-	sscanf(cnc->c_fetchon,"%lld",&cc.c_fetchon);
-	sscanf(cnc->c_purge,"%lld",&cc.c_purge);
-	sscanf(cnc->c_delay,"%lld",&cc.c_delay);
-	sscanf(cnc->c_stride,"%lld",&cc.c_stride);
-	sscanf(cnc->c_rest_val,"%lld",&cc.c_rest_val);
-	sscanf(cnc->c_delay_start,"%lld",&cc.c_delay_start);
-	sscanf(cnc->c_depth,"%lld",&cc.c_depth);
+	sscanf(cnc->c_numrecs64,"%lld",(long long *)(&cc.c_numrecs64));
+	sscanf(cnc->c_reclen,"%lld",(long long *)(&cc.c_reclen));
+	sscanf(cnc->c_fetchon,"%lld",(long long *)(&cc.c_fetchon));
+	sscanf(cnc->c_purge,"%lld",(long long *)(&cc.c_purge));
+	sscanf(cnc->c_delay,"%lld",(long long *)(&cc.c_delay));
+	sscanf(cnc->c_stride,"%lld",(long long *)(&cc.c_stride));
+	sscanf(cnc->c_rest_val,"%lld",(long long *)(&cc.c_rest_val));
+	sscanf(cnc->c_delay_start,"%lld",(long long *)(&cc.c_delay_start));
+	sscanf(cnc->c_depth,"%lld",(long long *)(&cc.c_depth));
 #endif
 	sscanf(cnc->c_pit_hostname,"%s",cc.c_pit_hostname);
 	sscanf(cnc->c_pit_service,"%s",cc.c_pit_service);
@@ -21865,6 +22366,12 @@ become_client()
 	sscanf(cnc->c_sverify,"%d",&cc.c_sverify);
 	sscanf(cnc->c_odsync,"%d",&cc.c_odsync);
 	sscanf(cnc->c_diag_v,"%d",&cc.c_diag_v);
+	sscanf(cnc->c_zero_pct,"%d",&cc.c_zero_pct);
+	sscanf(cnc->c_N_special,"%d",&cc.c_N_special);
+	sscanf(cnc->c_dedup_granule_size,"%d",&cc.c_dedup_granule_size);
+	sscanf(cnc->c_dedup_flag,"%d",&cc.c_dedup_flag);
+	sscanf(cnc->c_dedup_iflag,"%d",&cc.c_dedup_iflag);
+	sscanf(cnc->c_dedup_bflag,"%d",&cc.c_dedup_bflag);
 	sscanf(cnc->c_dedup,"%d",&cc.c_dedup);
 	sscanf(cnc->c_dedup_interior,"%d",&cc.c_dedup_interior);
 	sscanf(cnc->c_dedup_compress,"%d",&cc.c_dedup_compress);
@@ -21950,7 +22457,13 @@ become_client()
 	fetchon = cc.c_fetchon;
 	verify = cc.c_verify;
 	diag_v = cc.c_diag_v;
+	zero_pct = cc.c_zero_pct;
+	N_special = cc.c_N_special;
+	dedup_granule_size = cc.c_dedup_granule_size;
 	dedup = cc.c_dedup;
+	dedup_flag = cc.c_dedup_flag;
+	dedup_iflag = cc.c_dedup_iflag;
+	dedup_bflag = cc.c_dedup_bflag;
 	dedup_interior = cc.c_dedup_interior;
 	dedup_compress = cc.c_dedup_compress;
 	dedup_mseed = cc.c_dedup_mseed;
@@ -22004,6 +22517,8 @@ become_client()
 	depth = cc.c_depth;
 	delay_start = cc.c_delay_start;
 	compute_time = cc.c_compute_time;
+	if(N_special)
+		touch_dedup(buffer1, MAXBUFFERSIZE);
 	if(cdebug)
 	{
 		fprintf(newstdout,"Child %d change directory to %s\n",(int)chid,workdir);
@@ -22039,7 +22554,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_write_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_write_test((long)0);
+		thread_write_test(0);
 		break;
 #ifdef HAVE_PREAD
 	case THREAD_PWRITE_TEST : 
@@ -22048,7 +22563,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_pwrite_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_pwrite_test((long)0);
+		thread_pwrite_test(0);
 		break;
 #endif
 	case THREAD_REWRITE_TEST : 
@@ -22057,7 +22572,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_rewrite_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_rwrite_test((long)0);
+		thread_rwrite_test(0);
 		break;
 	case THREAD_READ_TEST : 
 		if(cdebug>=1)
@@ -22065,7 +22580,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_read_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_read_test((long)0);
+		thread_read_test(0);
 		break;
 #ifdef HAVE_PREAD
 	case THREAD_PREAD_TEST : 
@@ -22074,7 +22589,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_read_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_pread_test((long)0);
+		thread_pread_test(0);
 		break;
 #endif
 	case THREAD_REREAD_TEST : 
@@ -22083,7 +22598,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_reread_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_rread_test((long)0);
+		thread_rread_test(0);
 		break;
 	case THREAD_STRIDE_TEST : 
 		if(cdebug>=1)
@@ -22091,7 +22606,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_stride_read_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_stride_read_test((long)0);
+		thread_stride_read_test(0);
 		break;
 	case THREAD_RANDOM_READ_TEST : 
 		if(cdebug>=1)
@@ -22099,7 +22614,7 @@ become_client()
 			fprintf(newstdout,"Child %d running random read test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_ranread_test((long)0);
+		thread_ranread_test(0);
 		break;
 	case THREAD_RANDOM_WRITE_TEST : 
 		if(cdebug>=1)
@@ -22107,7 +22622,7 @@ become_client()
 			fprintf(newstdout,"Child %d running random write test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_ranwrite_test((long)0);
+		thread_ranwrite_test(0);
 		break;
 	case THREAD_REVERSE_READ_TEST : 
 		if(cdebug>=1)
@@ -22115,7 +22630,7 @@ become_client()
 			fprintf(newstdout,"Child %d running reverse read test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_reverse_read_test((long)0);
+		thread_reverse_read_test(0);
 		break;
 	case THREAD_RANDOM_MIX_TEST : 
 		if(cdebug>=1)
@@ -22123,7 +22638,7 @@ become_client()
 			fprintf(newstdout,"Child %d running mixed workload test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_mix_test((long)0);
+		thread_mix_test(0);
 		break;
 	case THREAD_FWRITE_TEST : 
 		if(cdebug>=1)
@@ -22131,7 +22646,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_fwrite_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_fwrite_test((long)0);
+		thread_fwrite_test(0);
 		break;
 	case THREAD_FREAD_TEST : 
 		if(cdebug>=1)
@@ -22139,7 +22654,7 @@ become_client()
 			fprintf(newstdout,"Child %d running thread_fread_test\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_fread_test((long)0);
+		thread_fread_test(0);
 		break;
 	case THREAD_CLEANUP_TEST : 
 		if(cdebug>=1)
@@ -22147,7 +22662,7 @@ become_client()
 			fprintf(newstdout,"Child %d running cleanup\n",(int)chid);
 			fflush(newstdout);
 		}
-		thread_cleanup_test((long)0);
+		thread_cleanup_test(0);
 		break;
 	};
 	if(cdebug>=1)
@@ -22168,20 +22683,8 @@ become_client()
  */
 #ifdef HAVE_ANSIC_C
 void
-tell_master_stats(testnum , chid, throughput, actual, 
-		 cpu_time, wall_time, stop_flag, child_flag)
-int testnum; 
-long long chid; 
-double throughput, actual, wall_time;
-float cpu_time;
-char stop_flag;
-long long child_flag;
-/*
-void
-tell_master_stats(int testnum , long long chid, double tthroughput, 
-		double actual, float cpu_time, float wall_time, 
-		char stop_flag, long long child_flag)
-*/
+tell_master_stats(int testnum , long long chid, double throughput, double actual, 
+		 float cpu_time, double wall_time, char stop_flag, long long child_flag)
 #else
 void
 tell_master_stats(testnum , chid, throughput, actual, cpu_time, 
@@ -22537,6 +23040,9 @@ long long childnum;
 	x = (int) childnum;
 	if(mdebug>=1)
 		printf("Master: Tell child %d to begin\n",x);
+	cc.c_zero_pct = zero_pct;
+	cc.c_N_special = N_special;
+	cc.c_dedup_granule_size = dedup_granule_size;
 	cc.c_command = R_FLAG_DATA;
 	cc.c_child_flag = CHILD_STATE_BEGIN; 
 	cc.c_client_number = (int)childnum; 
@@ -22711,6 +23217,9 @@ terminate_child_async()
 	{
 		child_idents[i].state = C_STATE_ZERO;
 		cc.c_client_number = (int)i; 
+		cc.c_zero_pct = zero_pct;
+		cc.c_N_special = N_special;
+		cc.c_dedup_granule_size = dedup_granule_size;
 		if(mdebug)
 			printf("Master terminating async channels to children.\n");
 		master_send(master_send_async_sockets[i],child_idents[i].child_name, &cc,sizeof(struct client_command));
@@ -22753,6 +23262,9 @@ distribute_stop()
 	cc.c_stop_flag = 1;
 	for(i=0;i<num_child;i++)
 	{
+		cc.c_zero_pct = zero_pct;
+		cc.c_N_special = N_special;
+		cc.c_dedup_granule_size = dedup_granule_size;
 		cc.c_client_number = (int)i; 
 		if(mdebug)
 			printf("Master distributing stop flag to child %d\n",i);
@@ -23326,7 +23838,11 @@ int size_of_message;
 		fprintf(newstdout,"Child enters accept\n");
 		fflush(newstdout);
 	}
-	ns=accept(s,(void *)addr,&me);
+#if defined(ANDROID)
+        ns=accept((int)s,(struct sockaddr *)addr,(socklen_t *)&me);
+#else
+        ns=accept(s,(void *)addr,&me);
+#endif
 	if(cdebug)
 	{
 		fprintf(newstdout,"Child attached for receive. Sock %d  %d\n", ns,errno);
@@ -23563,7 +24079,11 @@ int sp_master_listen_port;
 		printf("Master enters accept\n");
 		fflush(stdout);
 	}
-	ns=accept(s,(void *)addr,&me);
+#if defined(ANDROID)
+        ns=accept((int)s,(struct sockaddr *)addr,(socklen_t *)&me);
+#else
+        ns=accept(s,(void *)addr,&me);
+#endif
 	if(mdebug)
 	{
 		printf("Master attached for receive. Sock %d  %d\n", ns,errno);
@@ -23893,90 +24413,254 @@ char *test;
  * Returns 0 (zero) for success, and -1 (minus one) for failure.
  */
 int
-gen_new_buf(char *ibuf, char *obuf, long seed, int size, int percent,
+special_gen_new_buf(char *ibuf, char *obuf, long seed, int size, int percent,
 	int percent_interior, int percent_compress, int all)
 {
-	register int *ip, *op; /* Register for speed 	*/
-	register int iseed; 	/* Register for speed 	*/
-	register int isize; 	/* Register for speed 	*/
-	register int cseed;	/* seed for dedupable for within & ! across */
-	register int x,w; 	/* Register for speed 	*/
-	register int value; 	/* Register for speed 	*/
-	register int interior_size; 	/* size of interior dedup region */
-	register int compress_size; 	/* size of compression dedup region */
-	if(ibuf == NULL)	/* no input buf 	*/
-		return(-1);
-	if(obuf == NULL)	/* no output buf 	*/
-		return(-1);
-	if((percent > 100) || (percent < 0)) /* percent check */
-		return(-1);
-	if(size == 0)		/* size check 		*/
-		return(-1);
-	srand(seed+1+(((int)numrecs64)*dedup_mseed)); /* set random seed */
-	iseed = rand();		/* generate random value */
-	isize = (size * percent)/100; /* percent that is dedupable */
-	interior_size = ((isize * percent_interior)/100);/* /sizeof(int) */
-	compress_size =((interior_size * percent_compress)/100);
-	ip = (int *)ibuf;	/* pointer to input buf */
-	op = (int *)obuf;	/* pointer to output buf */
-	if(all == 0)		/* Special case for verify only */
-		isize = sizeof(int);
-	/* interior_size = dedup_within + dedup_across */
-	for(w=0;w<interior_size;w+=sizeof(int))	
-	{
-		*op=0xdeadbeef+dedup_mseed;
-		*ip=0xdeadbeef+dedup_mseed;
-		op++;
+        register int *ip, *op; /* Register for speed   */
+        register int iseed;    /* Register for speed   */
+        register int isize;    /* Register for speed   */
+        register int cseed;    /* seed for dedupable for within & ! across */
+        register int x,w;       /* Register for speed   */
+        register int value;     /* Register for speed   */
+        register int interior_size;     /* size of interior dedup region */
+        register int compress_size;     /* size of compression dedup region */
+        int base = seed * reclen;
+        if(ibuf == NULL)        /* no input buf         */
+                return(-1);
+        if(obuf == NULL)        /* no output buf        */
+                return(-1);
+        if((percent > 100) || (percent < 0)) /* percent check */
+                return(-1);
+        if(size == 0)           /* size check           */
+                return(-1);
+        srand(seed+1+(((int)numrecs64)*dedup_mseed)); /* set random seed */
+        iseed =rand();
+        isize = (size * percent)/100; /* percent that is dedupable */
+
+        interior_size = ((isize * percent_interior)/100);/* /sizeof(long) */
+        compress_size =((interior_size * percent_compress)/100);
+        ip = (int *)ibuf;      /* pointer to input buf */
+        op = (int *)obuf;      /* pointer to output buf */
+        if(all == 0)            /* Special case for verify only */
+                isize = sizeof(int);
+        /* dedup region boundary                                               */
+        /* [0,interior_size-compress_size) :  dedupable within and across       */
+        /* [interior_size-compress_size, interior_size) : dedupable within only */
+        /* [interior_size, isize] : dedupable across only                       */
+        /* [isize, size] : non-dedupable                                        */
+
+        /* check whether each dedup region is starting a dedup unit           */
+        /* printf("within&across@0 within@%08x across@%08x nondedup@%x\n",     */
+        /*     interior_size-compress_size,interior_size, isize);  		*/
+        /* if ( (interior_size-compress_size) %dedup_granule != 0)              */
+        /*      printf("warning: dedup region(within only) is starting in the  */
+        /*        middle of a dedup unit\n");     				*/
+        /* if ( interior_size %dedup_granule_size != 0)                         */
+        /*      printf("warning: dedup region(across only) is starting in the  */
+        /*          middle of a dedup unit\n");     				*/
+        /* if ( isize %dedup_granule_size != 0)                                 */
+        /*      printf("warning: nondedup region is starting in the middle of   */
+        /*         a unit\n");                      				*/
+
+        /* interior_size = dedup_within + dedup_across                          */
+        /* /for(w=0;w<interior_size;w+=sizeof(long))                            */
+        for(w=0;w<interior_size-compress_size;w+=dedup_granule_size,
+		op+=dedup_unit_step,ip+=dedup_unit_step)
+        {
+                *op=0xdeadbeefL+ (long)dedup_mseed;
+                *ip=0xdeadbeefL+ (long)dedup_mseed;
+                blkidx[chid]++;
+        }
+        /* for(w=0;w<interior_size;w+=sizeof(long))     */
+        /* {                                            */
+        /*     if (*op) *op=0xdeadbeef+dedup_mseed;     */
+        /*     if (*ip) *ip=0xdeadbeef+dedup_mseed;     */
+        /*     op++;                                    */
+        /*     ip++;                                    */
+        /* }                                            */
+
+        /* Prepare for dedup within but not across      */
+        w=interior_size - compress_size;
+        op=(int *)&obuf[w];
+        ip=(int *)&ibuf[w];
+        srand(chid+1+dedup_mseed);      /* set randdom seed       */
+        cseed = rand();         	/* generate random value */
+
+        for(w=(interior_size-compress_size);w<interior_size;w+=sizeof(int))
+        {
+                if ((zero_pct != -1) && (*ip==0) ) /* if *ip and active zero_pct, do nothing */
+			;
+		else
+			*op = *ip ^ cseed; /* if *ip is not zero, do the xor op */
+            if (w%dedup_granule_size==0) 
+	    {
+                *op++=(long)chid; 
 		ip++;
-	}	
-	/* Prepare for dedup within but not across */
-	w=interior_size - compress_size;
-	op=(int *)&obuf[w];
-	ip=(int *)&ibuf[w];
-	srand(chid+chid_skew+1+dedup_mseed);            /* set randdom seed 	*/
-	cseed = rand();		/* generate random value */
-	for(w=(interior_size-compress_size);w<interior_size;w+=sizeof(int))	
-	{
-		*op=*ip ^ cseed; /* do the xor op */
-		op++;
+                *op++=0xbeef; 
 		ip++;
-	}	
- 	/* isize = dedup across only */
-	for(x=interior_size;x<isize;x+=sizeof(int))	/* tight loop for transformation */
-	{
-		*op=*ip ^ iseed; /* do the xor op */
-		op++;
+                blkidx[chid]++; 
+		w+=sizeof(int);
+            } 
+	    else 
+	    {
+                op++;
+                ip++;
+            }
+        }
+
+        /* isize = dedup across only */
+        for(x=interior_size;x<isize;x+=sizeof(int))
+        {
+            if (zero_pct!=-1 && (*ip==0)) 
+		;
+            else 
+		*op = *ip^iseed;
+            if (x%dedup_granule_size == 0) 
+	    {
+                *op++=(int)((x+base)>>12);
 		ip++;
-	}	
-	if(all == 0)		/* Special case for verify only */
-		return(0);
-	/* make the rest of the buffer non-dedupable */
-	if(100-percent > 0)
-	{
-		srand(1+seed+((chid+chid_skew+1)*(int)numrecs64)*dedup_mseed);
-		value=rand();
-/* printf("Non-dedup value %x seed %x\n",value,seed);*/
-		for( ; x<size;x+=sizeof(int))
-			*op++=(*ip++)^value; /* randomize the remainder */
-	}
-	return(0);
+                *op++=0xdead;
+		ip++; 
+		x+=sizeof(int);
+                blkidx[chid]++;
+            } 
+	    else 
+	    {
+                   op++;
+                   ip++;
+            }
+        }
+        if(all == 0)            /* Special case for verify only */
+                return(0);
+        /* make the rest of the buffer non-dedupable */
+        if(100-percent > 0)
+        {
+                srand(1+seed+((chid+1)*(int)numrecs64)*dedup_mseed);
+                value=rand();
+                for( ; x<size;x+=sizeof(int)) 
+		{
+                    if (zero_pct!=-1 && (*ip==0)) 
+			;
+                    else 
+			*op=(*ip)^value;
+                    if (x%dedup_granule_size==0) 
+		    {
+                        *op++=(int)(chid); 
+			ip++;
+                        *op++=(int)((x+base)>>12); 
+			ip++;
+                        blkidx[chid]++; 
+			x+= sizeof(int);
+                    } 
+		    else 
+		    {
+                        ip++;
+                        op++;
+                    }
+                }
+        }
+
+        return(0);
 }
-/* 
- * Used to touch all of the buffers so that the CPU data
- * cache is hot, and not part of the measurement.
+
+/* This is problematic as the zeros are not adjacent, which means that the 
+ * compression algorithm won't save any space as the dictionay index and count
+ * would ocupy the same space as the original int of zero. 
+ */
+#ifdef GOOFY
+int 
+old_compressible_rand(void)
+{
+        /* zero_pct:[0,100] */
+        int toss = ((((double)rand()/((double)MAX_RAND+(double)1))*100+1));
+        if (toss>zero_pct) 
+	{
+		negatives++;
+                return (long)(((double)rand()/((double)MAX_RAND+(double)1))*MAX_RAND)+1;
+                               /* [1,MAX_RAND]. avoid zeros because  */
+                               /* zeros are used for compressibility control  */
+        } 
+	else 
+	{
+		positives++;
+                return 0;
+        }
+}
+#endif
+/*
+ * Compress 16 ints at a time so that there is sufficient compressible
+ * content so as to permit compression algorithms to work.  i.e. there
+ * is sufficient compression to more than compensate for the dictionay
+ * index and the reference count.
  */
 void
-touch_dedup(char *i, int size)
+compressible_rand_16_int(int *L_ptr)
 {
-	register int x;
-	register int *ip;
-	ip = (int *)i;
-	srand(DEDUPSEED);
-	for(x=0;x<size/sizeof(int);x++)
-	{
-		*ip=rand(); /* fill initial buffer */
-		ip++;
-	}
+        /* zero_pct:[0,100] */
+	int k;
+        int toss = ((lrand48()>>3)%100)+1;
+        if (toss>zero_pct)
+        {
+		/* Fill in 16 ints with data */
+		for(k=0;k<16;k++)
+		{
+		    negatives++;
+		    L_ptr[k]=(int)rand();
+		}
+                return;
+        }
+        else
+        {
+		/* Fill in 16 ints with zeros so that compression algorithms 
+ 		 * will see the savings and engage. Without having a bunch of 
+ 		 * adjacent zeros the compression will dis-engage.
+		 */
+		for(k=0;k<16;k++)
+		{
+		    positives++;
+		    L_ptr[k]=0;
+		}
+                return;
+        }
+}
+
+
+/* 
+ * Used to touch all of the buffers so that the CPU data
+ * cache is hot, and not part of the measurement. 
+ * This is for mixed mode of compression + dedup.
+ */
+void
+new_touch_dedup(char *i, int size)
+{
+        register int x;
+        register int *ip;
+	int *L_ptr;
+        ip = (int *)i;
+        /* To make sure every fileset generates different dedup patterns */
+        srand(DEDUPSEED+dedup_mseed);
+
+	L_ptr = ip;
+        for(x=0;x<(int)(size/sizeof(int));x++)
+        {
+		L_ptr = ip;
+                if ( zero_pct >= 0 ) 
+		{
+		    /* Have compressible_rand_16_int() fill in 16 ints at a 
+                     * time so that we have adjacent zeros or adjacent random 
+                     * numbers. 
+		     * One needs to do this or the zeros won't compress as the
+		     * dictionary entry would take the same space as a single 
+		     * int 
+		     */
+		    /* fill initial buffer with groups of 16 bytes of
+                     * compressible or non-compressible data 
+                     */
+		    if((x % 16) == 0)
+                        compressible_rand_16_int(L_ptr); 
+                }
+                ip++;
+        }
 }
 
 /* 
@@ -24579,7 +25263,7 @@ dump_hist(char *what,int id)
 }
 
 #ifdef HAVE_ANSIC_C
-void * thread_fwrite_test(void *x)
+void * thread_fwrite_test(int x)
 #else
 void * thread_fwrite_test( x)
 #endif
@@ -24623,7 +25307,13 @@ void * thread_fwrite_test( x)
         char *how;
         long long Index = 0;
         FILE *stream = NULL;
-        static int First_Run = 1;
+        int First_Run[MAXSTREAMS];
+	int kk;
+
+	for(kk=0;kk<MAXSTREAMS;kk++)
+		First_Run[kk]=1;
+
+        double burst_acc_time_sec = 0;
 
         if(compute_flag)
                 delay=compute_time;
@@ -24720,9 +25410,9 @@ void * thread_fwrite_test( x)
                 purge_buffer_cache();
         }
 
-        if(First_Run==1)
+        if(First_Run[xx]==1)
         {
-		First_Run=0;
+		First_Run[xx]=0;
                 if(check_filename(filename))
                         how="r+"; /* file exists, don't create and zero a new one. */
                 else
@@ -24766,7 +25456,7 @@ void * thread_fwrite_test( x)
             buffer=mainbuffer;
         if(fetchon)
                 fetchit(buffer,reclen);
-        if(verify || dedup || dedup_interior)
+        if(verify || dedup_flag || dedup_iflag)
                 fill_buffer(buffer,reclen,(long long)pattern,sverify,(long long)0);
 
         compute_val=(double)0;
@@ -24851,7 +25541,7 @@ void * thread_fwrite_test( x)
                                 Index=0;
                         buffer = mbuffer + Index;
                 }
-                if((verify & diag_v) || dedup || dedup_interior)
+                if((verify & diag_v) || dedup_flag || dedup_iflag)
                         fill_buffer(buffer,reclen,(long long)pattern,sverify,i);
                 if(purge)
                         purgeit(buffer,reclen);
@@ -24872,6 +25562,11 @@ void * thread_fwrite_test( x)
 			exit_code = 74;
                         signal_handler();
                 }
+
+#ifndef NO_THREADS
+		      count_burst(&burst_acc_time_sec, xx);
+#endif
+
 		if(hist_summary)
 		{
 			thread_qtime_stop=time_so_far();
@@ -24890,9 +25585,9 @@ void * thread_fwrite_test( x)
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
                 w_traj_ops_completed++;
@@ -24920,9 +25615,9 @@ void * thread_fwrite_test( x)
         if(!stopped){
                 temp_time = time_so_far();
 		if(inc_think)
-                	child_stat->throughput = ((temp_time - starttime1)-time_res);
+                	child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec);
 		else
-                	child_stat->throughput = ((temp_time - starttime1)-time_res)
+                	child_stat->throughput = ((temp_time - starttime1)-time_res - burst_acc_time_sec)
                         	-compute_val;
                 if(child_stat->throughput < (double).000001)
                 {
@@ -24964,12 +25659,11 @@ void * thread_fwrite_test( x)
 
         if (debug1) {
 #ifdef NO_PRINT_LLD
-                printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+                printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n", (long)xx,
 #else
-                printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+                printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",(long long)xx,
 #endif
-                        xx, walltime, cputime,
-                        cpu_util(cputime, walltime));
+                        walltime, cputime,cpu_util(cputime, walltime));
         }
         child_stat->flag = CHILD_STATE_HOLD; /* Tell parent I'm done */
         stopped=0;
@@ -24980,9 +25674,9 @@ void * thread_fwrite_test( x)
 
         if(debug1)
 #ifdef NO_PRINT_LLD
-                printf("\nChild finished %ld\n",xx);
+                printf("\nChild finished %ld\n",(long)xx);
 #else
-                printf("\nChild finished %lld\n",xx);
+                printf("\nChild finished %lld\n",(long long)xx);
 #endif
         if(Q_flag && (thread_wqfd !=0) )
                 fclose(thread_wqfd);
@@ -25042,7 +25736,7 @@ return(0);
 
 
 #ifdef HAVE_ANSIC_C
-void * thread_fread_test(void *x)
+void * thread_fread_test(int x)
 #else
 void * thread_fread_test( x)
 #endif
@@ -25135,15 +25829,15 @@ void * thread_fread_test( x)
         {
            if(use_thread)
 #ifdef NO_PRINT_LLD
-                printf("\nStarting child %ld\n",xx);
+                printf("\nStarting child %ld\n",(long)xx);
 #else
-                printf("\nStarting child %lld\n",xx);
+                printf("\nStarting child %lld\n",(long long)xx);
 #endif
            else
 #ifdef NO_PRINT_LLD
-                printf("\nStarting process %d slot %ld\n",getpid(),xx);
+                printf("\nStarting process %d slot %ld\n",getpid(),(long)xx);
 #else
-                printf("\nStarting process %d slot %lld\n",getpid(),xx);
+                printf("\nStarting process %d slot %lld\n",getpid(),(long long)xx);
 #endif
 
         }
@@ -25308,18 +26002,18 @@ void * thread_fread_test( x)
 		{
 #ifdef _64BIT_ARCH_
 #ifdef NO_PRINT_LLD
-			printf("\nError freading block %ld %x\n", i,
+			printf("\nError freading block %ld %x\n", (long)i,
 				(unsigned long)buffer);
 #else
-			printf("\nError freading block %lld %llx\n", i,
+			printf("\nError freading block %lld %llx\n", (long long)i,
 				(unsigned long long)buffer);
 #endif
 #else
 #ifdef NO_PRINT_LLD
-			printf("\nError freading block %ld %lx\n", i,
+			printf("\nError freading block %ld %lx\n", (long)i,
 				(long)buffer);
 #else
-			printf("\nError freading block %lld %lx\n", i,
+			printf("\nError freading block %lld %lx\n", (long long)i,
 				(long)buffer);
 #endif
 #endif
@@ -25349,9 +26043,9 @@ void * thread_fread_test( x)
 		{
 			thread_qtime_stop=time_so_far();
 #ifdef NO_PRINT_LLD
-			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1ld %10.0f %10.1ld\n",(long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long)reclen);
 #else
-			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,reclen);
+			fprintf(thread_wqfd,"%10.1lld %10.0f %10.1lld\n",(long long)(traj_offset)/1024,((thread_qtime_stop-thread_qtime_start-time_res))*1000000,(long long)reclen);
 #endif
 		}
                 w_traj_ops_completed++;
@@ -25415,12 +26109,11 @@ void * thread_fread_test( x)
 
         if (debug1) {
 #ifdef NO_PRINT_LLD
-                printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+                printf(" child/slot: %ld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",(long)xx,
 #else
-                printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",
+                printf(" child/slot: %lld, wall-cpu: %8.3f %8.3fC" " -> %6.2f%%\n",(long long)xx,
 #endif
-                        xx, walltime, cputime,
-                        cpu_util(cputime, walltime));
+                        walltime, cputime,cpu_util(cputime, walltime));
         }
         child_stat->flag = CHILD_STATE_HOLD; /* Tell parent I'm done */
         stopped=0;
@@ -25431,9 +26124,9 @@ void * thread_fread_test( x)
 
         if(debug1)
 #ifdef NO_PRINT_LLD
-                printf("\nChild finished %ld\n",xx);
+                printf("\nChild finished %ld\n",(long)xx);
 #else
-                printf("\nChild finished %lld\n",xx);
+                printf("\nChild finished %lld\n",(long long)xx);
 #endif
         if(Q_flag && (thread_wqfd !=0) )
                 fclose(thread_wqfd);
@@ -25480,4 +26173,226 @@ void * thread_fread_test( x)
 #endif
 
 return(0);
+}
+
+static void update_burst_sleep(int fd, long long reclen, double *burst_sleep_time_till_now)
+{
+	if (burst_size_kb_64 == -1 || burst_sleep_duration_msec == -1)
+		return;
+	written_this_burst += reclen;
+	if (written_this_burst >= (burst_size_kb_64 * 1024)) {
+		struct timespec req, rem;
+		int err;
+		double sleep_start_time;
+
+		written_this_burst = 0;
+		rem.tv_sec = burst_sleep_duration_msec/1000;
+		rem.tv_nsec = (burst_sleep_duration_msec%1000)*1000000;
+		fsync(fd);
+		sleep_start_time = time_so_far();
+		do {
+			req = rem;
+			err = nanosleep(&req, &rem);
+		} while ((err == -1) && (errno == EINTR));
+		*burst_sleep_time_till_now += (time_so_far() - sleep_start_time);
+	}
+}
+
+#ifndef NO_THREADS
+static void count_burst(double* burst_acc_time_sec, long long stream_id)
+{
+	double burst_start_time_sec;
+	struct timespec req, rem;
+	int err;
+
+	if (burst_size_per_child == 0 || burst_sleep_duration_msec == -1)
+		return;
+
+	/* Burst mode is handled */
+	burst_written_so_far[stream_id] += reclen;
+
+	/* Need to sleep to empty the burst buffer ? */
+	if (burst_size_per_child  <= burst_written_so_far[stream_id])
+	{
+		burst_written_so_far[stream_id] = 0;
+		if (!direct_flag) {
+			fsync(fd);
+		}
+
+		/* Wait for other threads*/
+		burst_start_time_sec = time_so_far();
+		pthread_barrier_wait(barrier);
+
+		/* Sleep to empty the burst buffer*/
+		rem.tv_sec = burst_sleep_duration_msec/1000;
+		rem.tv_nsec = (burst_sleep_duration_msec%1000)*1000000;
+		do {
+			req = rem;
+			err = nanosleep(&req, &rem);
+		} while ((err == -1) && (errno == EINTR));
+
+		*burst_acc_time_sec += time_so_far() - burst_start_time_sec;
+	}
+}
+#endif
+
+#ifdef NO_FORK
+pid_t no_fork(void)
+{
+	printf("Fork not supported\n");
+	return(-1);
+}
+#endif
+
+#ifdef NO_SOCKET
+int no_socket(int x, int y, int z)
+{
+	printf("Socket() not supported\n");
+	return(-1);
+}
+int no_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
+{
+	printf("Accept() not supported\n");
+	return(-1);
+}
+int no_bind(int sockfd, const struct sockaddr *my_addr, socklen_t addrlen)
+{
+	printf("Bind() not supported\n");
+	return(-1);
+}
+int  no_connect(int  sockfd,  const  struct  sockaddr  *serv_addr,  socklen_t addrlen)
+{
+	printf("Connect() not supported\n");
+	return(-1);
+}
+#endif
+
+#ifdef NO_SIGNAL
+int no_kill(pid_t pid, int sig)
+{
+	printf("Kill() not supported\n");
+	return(-1);
+}
+#endif
+
+/*
+ *  * Used to touch all of the buffers so that the CPU data
+ *   * cache is hot, and not part of the measurement.
+ *    */
+void
+touch_dedup(char *i, int size)
+{
+        register int x;
+        register int *ip;
+	if(N_special)
+	{
+	/* printf("Size ========= %d\n",size);*/
+		new_touch_dedup(i, size);
+		return;
+	}
+        ip = (int *)i;
+        srand(DEDUPSEED);
+        for(x=0;x<(int)(size/sizeof(int));x++)
+        {
+                *ip=rand(); /* fill initial buffer */
+                ip++;
+        }
+}
+/*
+ * As quickly as possible, generate a new buffer that
+ * can not be easily compressed, or de-duped. Also
+ * permit specified percentage of buffer to be updated.
+ *
+ * ibuf ... input buffer
+ * obuf ... output buffer
+ * seed ... Seed to use for srand, rand -> xor ops
+ *          Seed composed from: blocknumber
+            (do not include childnum as you want duplicates)
+ * size ... size of buffers. (in bytes)
+ * percent. Percent of buffer to modify.
+ * percent_interior. Percent of buffer that is dedupable within
+ *                   and across files
+ * percent_compress. Percent of buffer that is dedupable within
+ *                   but not across files
+ *
+ * Returns 0 (zero) for success, and -1 (minus one) for failure.
+ */
+int
+gen_new_buf(char *ibuf, char *obuf, long seed, int size, int percent,
+        int percent_interior, int percent_compress, int all)
+{
+        register int *ip, *op;  /* Register for speed    */
+        register int iseed;     /* Register for speed   */
+        register int isize;     /* Register for speed   */
+        register int cseed;     /* seed for dedupable for within & ! across */
+        register int x,w;       /* Register for speed   */
+        register int value;     /* Register for speed   */
+        register int interior_size;     /* size of interior dedup region */
+        register int compress_size;     /* size of compression dedup region */
+	int ret = 0;
+
+	if(N_special)
+	{
+		ret = special_gen_new_buf(ibuf, obuf, seed, size, percent, 
+		    percent_interior, percent_compress, all);
+		/* printf("Pos: %d Neg: %d\n",positives, negatives);*/
+		return(ret);
+	}
+		
+        if(ibuf == NULL)        /* no input buf         */
+                return(-1);
+        if(obuf == NULL)        /* no output buf        */
+                return(-1);
+        if((percent > 100) || (percent < 0)) /* percent check */
+                return(-1);
+        if(size == 0)           /* size check           */
+                return(-1);
+        srand(seed+1+(((int)numrecs64)*dedup_mseed)); /* set random seed */
+        iseed = rand();         /* generate random value */
+        isize = (size * percent)/100; /* percent that is dedupable */
+        interior_size = ((isize * percent_interior)/100);/* /sizeof(int) */
+        compress_size =((interior_size * percent_compress)/100);
+        ip = (int *)ibuf;       /* pointer to input buf */
+        op = (int *)obuf;       /* pointer to output buf */
+        if(all == 0)            /* Special case for verify only */
+                isize = sizeof(int);
+        /* interior_size = dedup_within + dedup_across */
+        for(w=0;w<interior_size;w+=sizeof(int))
+        {
+                *op=0xdeadbeef+dedup_mseed;
+                *ip=0xdeadbeef+dedup_mseed;
+                op++;
+                ip++;
+        }
+        /* Prepare for dedup within but not across */
+        w=interior_size - compress_size;
+        op=(int *)&obuf[w];
+        ip=(int *)&ibuf[w];
+        srand(chid+chid_skew+1+dedup_mseed);            /* set randdom seed     */
+        cseed = rand();         /* generate random value */
+        for(w=(interior_size-compress_size);w<interior_size;w+=sizeof(int))
+        {
+                *op=*ip ^ cseed; /* do the xor op */
+                op++;
+                ip++;
+        }
+        /* isize = dedup across only */
+        for(x=interior_size;x<isize;x+=sizeof(long))    /* tight loop for transformation */
+        {
+                *op=*ip ^ iseed; /* do the xor op */
+                op++;
+                ip++;
+        }
+        if(all == 0)            /* Special case for verify only */
+                return(0);
+        /* make the rest of the buffer non-dedupable */
+        if(100-percent > 0)
+        {
+                srand(1+seed+((chid+chid_skew+1)*(int)numrecs64)*dedup_mseed);
+                value=rand();
+	/* printf("Non-dedup value %x seed %x\n",value,seed);*/
+                for( ; x<size;x+=sizeof(long))
+                        *op++=(*ip++)^value; /* randomize the remainder */
+        }
+        return(0);
 }

@@ -23,16 +23,16 @@
 #include <sys/fcntl.h>
 #endif
 
-#if defined(OSV5) || defined(linux) || defined (__FreeBSD__) || defined(__OpenBSD__) || defined(__bsdi__) || defined(__APPLE__) || defined(__DragonFly__)
+#if defined(OSV5) || defined(linux) || defined (__FreeBSD__) || defined(__OpenBSD__) || defined(__bsdi__) || defined(__APPLE__) || defined(__DragonFly__) || defined(__NetBSD__)
 #include <string.h>
 #endif
 
-#if defined(linux) || defined(__DragonFly__) || defined(IOZ_macosx)
+#if defined(linux) || defined(__DragonFly__) || defined(IOZ_macosx) || defined(__NetBSD__) || defined(Windows)
 #include <unistd.h>
 #include <stdlib.h>
 #endif
 
-#if (defined(solaris) && defined( __LP64__ )) || defined(__s390x__) || defined(FreeBSD)
+#if (defined(solaris) && defined( __LP64__ )) || defined(__s390x__) || defined(__FreeBSD__)
 /* If we are building for 64-bit Solaris, all functions that return pointers
  * must be declared before they are used; otherwise the compiler will assume
  * that they return ints and the top 32 bits of the pointer will be lost,
@@ -55,7 +55,7 @@
 /* Middle Endian */
 #define ENDIAN_4  4
 
-int junk, *junkp;
+int junk1, *junkp;
 
 
 #ifdef HAVE_ANSIC_C
@@ -91,10 +91,7 @@ void do_label(int,char *,int,int);
 /*	  column							*/
 /************************************************************************/
 
-char libbif_version[] = "Libbif Version $Revision: 3.26 $";
-void do_eof(int );		/* Used internally */
-void do_header(int );		/* Used internally */
-int endian(void);
+char libbif_version[] = "Libbif Version $Revision: 3.33 $";
 #endif
 
 #define BOF 0x9
@@ -158,6 +155,28 @@ struct float_record {		/* Type 3 record */
 	char rgblo;
 	double data;
 	};
+
+#ifdef HAVE_ANSIC_C
+void close_xls(int);
+int create_xls(char *);
+void do_header(int);
+void do_int(int, int, int, int);
+void do_float(int, double, int, int);
+void do_label(int, char *, int, int );
+void do_eof(int) ;
+int endian(void);
+#else
+void
+close_xls();
+int create_xls();
+void do_header();
+void do_int();
+void do_float();
+void do_label();
+void do_eof();
+int endian();
+#endif
+
 /*
  * Write the EOF and close the file 
  */
@@ -166,6 +185,7 @@ void
 close_xls(int fd)
 {
 #else
+void
 close_xls(fd)
 int fd;
 {
@@ -207,6 +227,7 @@ void
 do_header(int fd) /* Stick the BOF at the beginning of the file */
 {
 #else
+void
 do_header(fd) 
 int fd;
 {
@@ -220,7 +241,7 @@ int fd;
 	bof.lo_version=0x0;
 	bof.hi_filetype=WORKSHEET;
 	bof.lo_filetype=0x0;
-	junk=write(fd,&bof,sizeof(struct bof_record));
+	junk1=write(fd,&bof,sizeof(struct bof_record));
 }
 
 /*
@@ -231,6 +252,7 @@ void
 do_int(int fd,int val, int row, int column)
 {
 #else
+void
 do_int(fd,val,row,column)
 int fd,val,row,column;
 {
@@ -252,7 +274,7 @@ int fd,val,row,column;
         intrec.lo_column=(char)(s_column>>8)&0xff;
         intrec.hi_data=(val & 0xff);
         intrec.lo_data=(val & 0xff00)>>8;
-	junk=write(fd,&intrec,13);
+	junk1=write(fd,&intrec,13);
 }
 
 /* Note: This routine converts Big Endian to Little Endian 
@@ -267,6 +289,7 @@ void
 do_float(int fd, double value, int row, int column)
 {
 #else
+void
 do_float(fd, value, row, column)
 int fd;
 double value;
@@ -338,8 +361,8 @@ int row,column;
 	   dptr[7]=0;
 	   printf("Excel output not supported on this architecture.\n");
 	}
-	junk=write(fd,&floatrec,11); /* Don't write floatrec. Padding problems */
-	junk=write(fd,&floatrec.data,8); /* Write value seperately */
+	junk1=write(fd,&floatrec,11); /* Don't write floatrec. Padding problems */
+	junk1=write(fd,&floatrec.data,8); /* Write value seperately */
 }
 
 /*
@@ -350,6 +373,7 @@ void
 do_label(int fd, char *string, int row, int column)
 {
 #else
+void
 do_label(fd, string, row, column)
 int fd;
 char *string;
@@ -381,7 +405,7 @@ int row,column;
 	i=strlen(string);
 	strcpy(labelrec.str_array,string);
 
-	junk=write(fd,&labelrec,sizeof(struct label_record));
+	junk1=write(fd,&labelrec,sizeof(struct label_record));
 
 }
 
@@ -393,12 +417,13 @@ void
 do_eof(int fd) 
 {
 #else
+void
 do_eof(fd) 
 int fd;
 {
 #endif
 	char buf[]={0x0a,0x00,0x00,0x00};
-	junk=write(fd,buf,4);
+	junk1=write(fd,buf,4);
 }
 	
 /* 

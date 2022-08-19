@@ -2505,4 +2505,183 @@ Fix for 64 bit and gen_new_buf
 Revision 3.427
 Adjust formatting so fields don't run together.
 =============================================================================
+Revision 3.428
+Adjust formatting so fields don't run together.
+=============================================================================
+Revision 3.429
+Add two more characters to array my_port_num.
+=============================================================================
+=============================================================================
+Revision 3.430
+Adding -+b option for bursty operations. 
+Donated by: Avi Shchislowski <Avi.Shchislowski@sandisk.com>
+=============================================================================
+Revision 3.432
+Adding NetBSD 64 bit.
+=============================================================================
+Revision 3.434
+Adding code from Alexey Skidanov. Pthread burst I/O.
+=============================================================================
+Revision 3.434
+Convert calls from atoi() into atoll() for those things that are actually long longs.
+=============================================================================
+Revision 3.436
+Code cleanup for casting consistency
+=============================================================================
+Revision 3.442
+Code cleanup for casting consistency and *&(^&*( compiler warnings !!!
+=============================================================================
+Revision 3.443
+Code cleanup for all of the un-needed void * maddness.
+=============================================================================
+Revision 3.444
+Cleanup 64 bit compiles.
+=============================================================================
+Revision 3.445
+Some BSD changes to avoid compiler complaints.
+=============================================================================
+Revision 3.446
+Some BSD changes to avoid compiler complaints.
+=============================================================================
+Revision 3.447
+Make sure we don't have missing prototypes.
+=============================================================================
+Revision 3.448
+Add support for building targets with NO_SIGNAL, NO_FORK, NO_SOCKET
+=============================================================================
+Revision 3.449
+Add support for building targets with NO_SIGNAL, NO_FORK, NO_SOCKET
+=============================================================================
+Revision 3.450
+Fix missing typedef in FreeBSD.
+=============================================================================
+Revision 3.451
+Fix typeoh in spelling of DragonFly.
+=============================================================================
+Revision 3.452
+Make the sighandler_t change effective for all BSD derivatives.
+=============================================================================
+Revision 3.454
+Make the my_sig_t change effective for all BSD derivatives.
+=============================================================================
+Revision 3.455
+Unify the usage of __FreeBSD__
+=============================================================================
+Revision 3.456
+Build on BSD 10.3 without warnings.  Clang compilers.
+=============================================================================
+Revision 3.457
+Build on BSD 10.3 without warnings.  Clang compilers.
+=============================================================================
+Revision 3.458
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.459
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.460
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.461
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.462
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.463
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.464
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.465
+Make more friendly to build on Solaris.
+=============================================================================
+Revision 3.466
+Fix error messages to use the correct file name from dummyfile[xx] instead of
+"filename" in the thread tests.
+=============================================================================
+Revision 3.467
+Fix compiler warning from Clang on MacOS for mythread_create(). Prototype
+didn't match the formal function definition.
+=============================================================================
+Revision 3.469
+Switch to IOZ_macosx everywhere for compatibility with Mountain Lion.
+=============================================================================
+Revision 3.470
+Increase MAXSTREAMS to 1024. Systems have more power today than 20+ years ago.
+=============================================================================
+Revision 3.471
+Make -+W -+C -+y use a flag instead of its option value to indiate its usage.
+=============================================================================
+Revision 3.472
+Adding -+M (special dedupe layout)
+Adding -+a (set compression in special layout)
+Adding -+Q (set dedupe granule size in special layout)
+=============================================================================
+Revision 3.473
+no change.
+=============================================================================
+Revision 3.474
+Cleanup for Cygwin64 build.
+=============================================================================
+Revision 3.475
+Cleanup for Cygwin64 build warnings.
+=============================================================================
+Revision 3.476
+Cleanup compiler warnings.
+=============================================================================
+Revision 3.477
+Bug fix code in special_gen_new_buf..
+=============================================================================
+Revision 3.478
+Bug fix code in special_gen_new_buf.. More copies of the other bug.
+=============================================================================
+Revision 3.479
+Bug fix code in special_gen_new_buf.. needed (*op ==0) in one more line.
+=============================================================================
+Revision 3.480
+Add -+R option to specify the file names are in a file.
+=============================================================================
+Revision 3.481
+Adding new contributor Sudhir Kumar
+=============================================================================
+Revision 3.482
+Fix help menu for -+R option.  It does not also use -F
+Bug fix for case of -H where gcc seems to think the size of long long
+is != size of off64_t
+Bug fix for prototype mismatch in async_write_no_copy.
+=============================================================================
+Revision 3.483
+Fix nesting of #ifdefs so that Windows lack of support for O_DIRECT presents
+splash indication.
+Enable O_DIRECT for Windows builds.
+=============================================================================
+Revision 3.485
+Improvements for building under Android
+=============================================================================
+Revision 3.486
+Fix compiler warning on Android.
+=============================================================================
+Revision 3.488
+Improve the Yates/Knuth method for shuffle.
+=============================================================================
+Revision 3.489
+Fix gcc-10 warning about no-common.
+=============================================================================
+Revision 3.490
+Fix compiler warning when HAVE_ANSIC is not defined
+=============================================================================
+Revision 3.491
+Fix CFLAGS issue from Fedora maintainer.
+=============================================================================
+Revision 3.492
+Improve the -+M option's compression pattern so that the achieved 
+compressibility is closer to the value specifed in the -+a option.
+=============================================================================
+Revision 3.493
+Move memorey allocaiton of main buffer to after the getopt, else 
+the -S can cause issues later.
+=============================================================================
+
 
