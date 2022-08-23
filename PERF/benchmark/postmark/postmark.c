@@ -684,10 +684,10 @@ int find_free_file()
 {
    int i;
 
-   if (file_allocated<simultaneous<<1 && file_table[file_allocated].size==0)
+   if (file_allocated<simultaneous<<2 && file_table[file_allocated].size==0)
       return(file_allocated++);
    else /* search entire table for holes */
-      for (i=0; i<simultaneous<<1; i++)
+      for (i=0; i<simultaneous<<2; i++)
          if (file_table[i].size==0)
             {
             file_allocated=i;
@@ -698,21 +698,26 @@ int find_free_file()
 }
 
 /* write 'size' bytes to file 'fd' using unbuffered I/O */
-void write_blocks(fd,size)
+int write_blocks(fd,size)
 int fd;
 int size;   /* bytes to write to file */
 {
    int offset=0; /* offset into file */
-   int i;
+   int i, ret;
 
    /* write even blocks */
    for (i=size; i>=write_block_size;
-      i-=write_block_size,offset+=write_block_size)
-      write(fd,file_source+offset,write_block_size);
+      i-=write_block_size,offset+=write_block_size) {
+      ret = write(fd,file_source+offset,write_block_size);
+      if (ret < 0)
+        return -1;
+   }
 
-   write(fd,file_source+offset,i); /* write remainder */
-
+   ret = write(fd,file_source+offset,i); /* write remainder */
+   if (ret < 0)
+     return -1;
    bytes_written+=size; /* update counter */
+   return 0;
 }
 
 /* write 'size' bytes to file 'fp' using buffered I/O */
@@ -757,8 +762,9 @@ char *dest;
 }
 
 /* creates new file of specified length and fills it with data */
-void create_file(buffered)
+int create_file(buffered, init)
 int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
+int init;
 {
    FILE *fp=NULL;
    int fd=-1;
@@ -770,7 +776,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
 
 //     file_table[free_file].size=
 //       file_size_low+RND(file_size_high-file_size_low);
-      if (RND(10) < bias_large) {
+      if (RND(10) < bias_large && RND(10) < bias_large) {
          file_table[free_file].size=
             file_size_low_limit+RND(file_size_high - file_size_low_limit);
       } else {
@@ -792,16 +798,20 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             }
          else
             {
-            write_blocks(fd,file_table[free_file].size);
+            int ret = write_blocks(fd,file_table[free_file].size);
             if (RND(10) < fsync_rate)
                fsync(fd);
             close(fd);
+	    if (ret < 0)
+	      return ret;
             }
          }
-      else
-         fprintf(stderr,"Error: cannot open '%s' for writing\n",
-            file_table[free_file].name);
+      else {
+         file_table[free_file].size=0;
+	 return -1;
       }
+    }
+    return 0;
 }
 
 /* deletes specified file from disk and file_table */
@@ -891,10 +901,10 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
             }
          else
             {
-            ioctl(fd, F2FS_IOC_START_ATOMIC_WRITE);
+            //ioctl(fd, F2FS_IOC_START_ATOMIC_WRITE);
             lseek(fd,RND(file_table[number].size - write_block_size), SEEK_SET);
             write_blocks(fd,write_block_size);
-            ioctl(fd, F2FS_IOC_COMMIT_ATOMIC_WRITE);
+            //ioctl(fd, F2FS_IOC_COMMIT_ATOMIC_WRITE);
             close(fd);
             }
 
@@ -912,7 +922,7 @@ int find_used_file() /* only called after files are created */
 {
    int used_file;
 
-   while (file_table[used_file=RND(simultaneous<<1)].size==0)
+   while (file_table[used_file=RND(simultaneous<<2)].size==0)
       ;
 
    return(used_file);
@@ -975,7 +985,7 @@ int buffered; /* 1=buffered I/O (default), 0=unbuffered I/O */
          {
          if (RND(10)<bias_create) /* create file */
             {
-            create_file(buffered);
+            create_file(buffered, 0);
             delete_file(find_used_file());
             }
          else
@@ -1095,10 +1105,10 @@ char *param; /* unused */
 
    /* allocate table of files at 2 x simultaneous files */
    file_allocated=0;
-   if ((file_table=(file_entry *)calloc(simultaneous<<1,sizeof(file_entry)))==
+   if ((file_table=(file_entry *)calloc(simultaneous<<2,sizeof(file_entry)))==
       NULL)
       fprintf(stderr,"Error: Failed to allocate table for %d files\n",
-         simultaneous<<1);
+         simultaneous<<2);
 
    if (file_system_count>0)
       location_index=build_location_index(file_systems,file_system_weight);
@@ -1115,10 +1125,15 @@ char *param; /* unused */
    time(&start_time); /* store start time */
 
    /* create files in specified directory until simultaneous number */
-   printf("Creating files...");
+   printf("Creating files till 100%...\n");
    fflush(stdout);
-   for (i=0; i<simultaneous; i++)
-      create_file(buffered_io);
+   for (i=0; i < simultaneous<<1; i++)
+      if (create_file(buffered_io, 1) < 0)
+	break;
+   sync();
+   printf("Deleting files %d to %d...\n", i, simultaneous);
+   for (; i > simultaneous; i--)
+          delete_file(find_used_file());
    sync();
    printf("Done\n");
   
