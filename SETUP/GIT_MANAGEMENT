@@ -75,3 +75,8 @@ If any interfaces have been removed or changed since the last public release, th
 git checkout -b bisect_branch
 git merge --no-commit master # to remove merge commits
 git bisect good/bad
+
+14. aosp/f2fs-tools update
+tools/external_updater/updater.sh check f2fs-tools
+tools/external_updater/updater.sh update f2fs-tools
+tools/external_updater/updater.sh update --stop_after_merge f2fs-tools
