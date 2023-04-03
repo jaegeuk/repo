@@ -26,7 +26,7 @@ _xfstests()
 	sudo apt-get install -y xfslibs-dev uuid-dev libtool-bin \
 		e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
 		libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
-		uuid-runtime python sqlite3 liburing-dev acl attr attr-dev acl-dev keyutils
+		uuid-runtime python sqlite3 liburing-dev acl attr attr-dev acl-dev keyutils libgdbm-compat-dev
 	cd xfstests-f2fs
 	git checkout f2fs
 	make -j4
@@ -93,6 +93,8 @@ _pahole()
 	make install
 }
 
+apt-get update
+
 (_f2fs)
 (_f2fs-tools)
 (_xfstests)
@@ -100,4 +102,4 @@ _pahole()
 (_e2fs)
 (_xfsprogs)
 (_fscrypt)
-(_pahole)
+#(_pahole)
