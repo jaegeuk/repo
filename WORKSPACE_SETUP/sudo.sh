@@ -18,7 +18,9 @@ cp /root/SETUP/mk_kernel.sh /root/
 
 cat /root/SETUP/grub >> /etc/default/grub
 
-sudo git config --global user.email "jaegeuk@kernel.org"
-sudo git config --global user.name "Jaegeuk Kim"
-sudo git config --global merge.tool "vimdiff"
-sudo git config pull.rebase true
+apt-get install vim git
+
+git config --global user.email "jaegeuk@kernel.org"
+git config --global user.name "Jaegeuk Kim"
+git config --global merge.tool "vimdiff"
+git config pull.rebase true

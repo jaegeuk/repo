@@ -3,7 +3,7 @@
 _f2fs()
 {
 	git clone https://github.com/jaegeuk/f2fs.git
-	apt-get install -y libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf autopoint dwarves
+	apt-get install -y debhelper bc rsync libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf autopoint dwarves
 	cd f2fs
 	git checkout g-dev-test
 }
@@ -16,7 +16,7 @@ _f2fs-tools()
 	git checkout g-dev-test
 	./autogen.sh
 	./configure --disable-dependency-tracking
-	make -j4
+	make -j4 CFLAGS=-DANDROID_TARGET
 	make install
 }
 
@@ -26,7 +26,7 @@ _xfstests()
 	sudo apt-get install -y xfslibs-dev uuid-dev libtool-bin \
 		e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
 		libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
-		uuid-runtime python sqlite3 liburing-dev acl attr attr-dev acl-dev keyutils libgdbm-compat-dev
+		uuid-runtime python2 sqlite3 liburing-dev acl attr attr-dev acl-dev keyutils libgdbm-compat-dev
 	cd xfstests-f2fs
 	git checkout f2fs
 	make -j4
@@ -62,7 +62,7 @@ _e2fs()
 _xfsprogs()
 {
 	git clone git://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git
-	apt install -y libini-config-dev libinih1 libinih-dev libblkid-dev
+	apt install -y libini-config-dev libinih1 libinih-dev libblkid-dev liburcu-dev
 	cd xfsprogs-dev
 	make -j4
 	make install-dev
@@ -81,18 +81,6 @@ _fscrypt()
 	make install
 }
 
-_pahole()
-{
-	apt-get install -y cmake libdw-dev libelf-dev libdwarf-dev
-	git clone git://git.kernel.org/pub/scm/devel/pahole/pahole.git
-	cd pahole
-	git am ../SETUP/2-0001-remove-ftrace-filter.patch.txt
-	mkdir build
-	cd build
-	cmake -D__LIB=lib ..
-	make install
-}
-
 apt-get update
 
 (_f2fs)
@@ -102,4 +90,10 @@ apt-get update
 (_e2fs)
 (_xfsprogs)
 (_fscrypt)
-#(_pahole)
+
+echo "In /etc/ld.so.conf.d/x86_64-linux-gnu.conf"
+echo "\# Multiarch support"
+echo "/lib"
+echo "/lib/x86_64-linux-gnu"
+echo "/usr/lib/x86_64-linux-gnu"
+echo "/usr/local/lib/x86_64-linux-gnu"

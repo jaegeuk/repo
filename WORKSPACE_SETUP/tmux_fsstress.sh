@@ -6,7 +6,6 @@ SUDO="sudo su"
 DSTAT="clear && sudo dstat -cmd"
 QUOTA1="quotacheck -u -g /mnt/test"
 QUOTA2="watch -n 1 repquota -u -g /mnt/test"
-TMUX="/tmp/tmux.log"
 
 _get_shell()
 {
@@ -15,8 +14,7 @@ _get_shell()
 
 _base_view()
 {
-	tmux list-window > $TMUX
-        cat $TMUX | grep "0: base"
+	tmux list-window | grep "0: base"
 	if [ $? -eq 0 ]; then
 		return
 	fi
@@ -110,10 +108,8 @@ _servers_4()
 
 _stress_view()
 {
-  echo 2
 	echo $2
-	tmux list-window > $TMUX
-	cat $TMUX | grep "$2: $1"
+	tmux list-window | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
@@ -143,8 +139,7 @@ _stress_view()
 _dmesg_view()
 {
 	echo $2
-	tmux list-window > $TMUX
-	cat $TMUX | grep "$2: $1"
+	tmux list-window | grep "$2: $1"
 	if [ $? -eq 0 ]; then
 		return
 	fi
