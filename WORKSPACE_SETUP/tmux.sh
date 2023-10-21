@@ -119,13 +119,11 @@ _xfs_view()
 
   tmux new-window -n $1 "nice -20 ssh -p 9224 jaegeuk@127.0.0.1"
   tmux selectp -t 0
-  tmux splitw -h -p 75 "nice -20 ssh -p 9225 jaegeuk@127.0.0.1"
-  tmux selectp -t 1
-  tmux splitw -h -p 66 "nice -20 ssh -p 9226 jaegeuk@127.0.0.1"
+  tmux splitw -h -p 66 "nice -20 ssh -p 9225 jaegeuk@127.0.0.1"
   tmux selectp -t 2
-  tmux splitw -h -p 50 "nice -20 ssh -p 9227 jaegeuk@127.0.0.1"
+  tmux splitw -h -p 50 "nice -20 ssh -p 9226 jaegeuk@127.0.0.1"
 
-  for i in `seq 0 3`
+  for i in `seq 0 2`
   do
     _sudo $i
     case $1 in
@@ -148,20 +146,16 @@ _xfs_dmesg_view()
 
   tmux new-window -n $1
   tmux selectp -t 0
-  tmux splitw -v -p 80
-  tmux selectp -t 1
-  tmux splitw -v -p 75
-  tmux selectp -t 2
   tmux splitw -v -p 66
+  tmux selectp -t 1
+  tmux splitw -v -p 50
 
   _klog 0 "f2fs"
-  _klog 1 "5.10"
-  _klog 2 "5.15"
-  _klog 3 "6.1"
+  _klog 1 "5.15"
+  _klog 2 "6.1"
 
   tmux setw synchronize-panes on
 }
-
 
 tmux has-session -t f2fs
 if [ $? -ne 0 ]; then
