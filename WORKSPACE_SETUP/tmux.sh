@@ -119,9 +119,9 @@ _xfs_view()
 
   tmux new-window -n $1 "nice -20 ssh -p 9224 jaegeuk@127.0.0.1"
   tmux selectp -t 0
-  tmux splitw -h -p 66 "nice -20 ssh -p 9225 jaegeuk@127.0.0.1"
-  tmux selectp -t 2
-  tmux splitw -h -p 50 "nice -20 ssh -p 9226 jaegeuk@127.0.0.1"
+  tmux splitw -h -p 66 "nice -20 ssh -p 9226 jaegeuk@127.0.0.1"
+  tmux selectp -t 1
+  tmux splitw -h -p 50 "nice -20 ssh -p 9227 jaegeuk@127.0.0.1"
 
   for i in `seq 0 2`
   do
@@ -151,8 +151,8 @@ _xfs_dmesg_view()
   tmux splitw -v -p 50
 
   _klog 0 "f2fs"
-  _klog 1 "5.15"
-  _klog 2 "6.1"
+  _klog 1 "6.1"
+  _klog 2 "6.6"
 
   tmux setw synchronize-panes on
 }
